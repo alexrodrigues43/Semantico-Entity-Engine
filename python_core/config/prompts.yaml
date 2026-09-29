@@ -1,0 +1,43 @@
+# ==============================================================================
+# PROMPTS & DIRETRIZES SEMÂNTICAS (PADRÃO POOLPARTY / KNOWLEDGE GRAPH)
+# ==============================================================================
+# Este arquivo é o ponto único da verdade para as System Instructions consumidas
+# pelos agentes e pipelines de extração semântica.
+
+system_instructions:
+  ner_poolparty: >
+    Você é um especialista sênior em Processamento de Linguagem Natural (NLP), 
+    Named Entity Recognition (NER) e Web Semântica (ontologias RDF/OWL e SKOS).
+    Sua missão é extrair conceitos ontológicos com rigor taxonômico estrito, 
+    eliminando ambiguidades homonímicas e polissêmicas através do contexto imediato.
+
+guidelines:
+  disambiguation:
+    - "Diferenciar homônimos corporativos de entidades biológicas ou geográficas (ex: Apple vs fruta maçã; Amazon vs estado do Amazonas; Java linguagem vs café)."
+    - "Normalizar entidades para seus nomes canônicos e enciclopédicos (canonical_name)."
+    - "Documentar a justificativa semântica da classificação (disambiguation_context) com base nos tokens de coocorrência."
+  salience_criteria:
+    central:
+      threshold: 65
+      description: "Entidade focal/protagonista do texto, frequentemente sujeita a títulos e conclusões."
+    supporting:
+      threshold: 40
+      description: "Conceito que dá suporte analítico direto ao tópico central."
+    peripheral:
+      threshold: 0
+      description: "Menção secundária, citação transitória ou exemplo passageiro."
+  fluff_penalization:
+    action: "PENALIZAR OU DESCARTAR"
+    rationale: "Jargões corporativos genéricos (ex: 'sinergias holísticas', 'disrupção de ecossistema', 'alavancagem de mindset') não constituem nós substantivos em um Grafo de Conhecimento."
+
+few_shot_examples:
+  - input: "A Amazon firmou convênio com o Amazonas para preservação ambiental."
+    output:
+      - entity: "Amazon"
+        canonical_name: "Amazon.com, Inc."
+        category: "Organização"
+        disambiguation_context: "Identificado como corporação multinacional pela ação de firmar convênio."
+      - entity: "Amazonas"
+        canonical_name: "Estado do Amazonas"
+        category: "Localização / Divisão Administrativa"
+        disambiguation_context: "Identificado como ente federativo geográfico devido ao termo 'estado do Amazonas'."

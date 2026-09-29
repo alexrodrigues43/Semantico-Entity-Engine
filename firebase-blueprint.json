@@ -1,0 +1,21 @@
+{
+  "$schema": "https://firebase.google.com/docs/firestore/blueprint/v1",
+  "entities": {
+    "User": {
+      "collection": "users",
+      "fields": {
+        "uid": { "type": "string", "description": "Unique user ID matching Firebase Auth UID" },
+        "email": { "type": "string", "description": "User email address" },
+        "displayName": { "type": "string", "description": "User full name or company" },
+        "photoURL": { "type": "string", "description": "User avatar URL" },
+        "role": { "type": "string", "description": "'admin' or 'client'" },
+        "status": { "type": "string", "description": "'active', 'pending', 'blocked', or 'expired'" },
+        "plan": { "type": "string", "description": "'trial', 'monthly', 'annual', or 'lifetime'" },
+        "createdAt": { "type": "string", "description": "Creation ISO date" },
+        "lastLoginAt": { "type": "string", "description": "Last login ISO date" },
+        "notes": { "type": "string", "description": "Internal admin notes, e.g. PIX date, invoice or contact" },
+        "toolUsageCount": { "type": "number", "description": "Count of AI tool and generation executions" }
+      }
+    }
+  }
+}

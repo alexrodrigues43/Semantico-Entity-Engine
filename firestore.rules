@@ -1,0 +1,53 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+    
+    function isSuperAdmin() {
+      return isAuthenticated() && (
+        (request.auth.token.email != null && request.auth.token.email.lower() == 'alexrodrigues43@gmail.com') ||
+        (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
+         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin')
+      );
+    }
+    
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    match /users/{userId} {
+      // User can read their own profile, or Super Admin can read any
+      allow get: if isOwner(userId) || isSuperAdmin();
+      
+      // Only Super Admin can list the users collection
+      allow list: if isSuperAdmin();
+      
+      // Document creation:
+      // Super admin can create any user profile.
+      // Normal user can only create their own profile with role 'client' and status 'pending'.
+      // If the email is the super admin email, they can register with admin and active status.
+      allow create: if isAuthenticated() && isOwner(userId) && (
+        (request.auth.token.email != null && request.auth.token.email.lower() == 'alexrodrigues43@gmail.com') ||
+        (
+          request.resource.data.role == 'client' &&
+          request.resource.data.status == 'pending' &&
+          request.resource.data.uid == request.auth.uid
+        )
+      );
+      
+      // Updates:
+      // Super admin can update everything (role, status, plan, notes, etc.)
+      // Normal user can only update safe fields (like toolUsageCount, displayName, lastLoginAt), never role, status, plan, or notes
+      allow update: if isSuperAdmin() || (
+        isOwner(userId) &&
+        !request.resource.data.diff(resource.data).affectedKeys().hasAny(['role', 'status', 'plan', 'notes'])
+      );
+      
+      // Deletions: only super admin
+      allow delete: if isSuperAdmin();
+    }
+  }
+}

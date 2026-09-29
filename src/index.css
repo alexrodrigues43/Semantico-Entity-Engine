@@ -1,0 +1,75 @@
+@import "tailwindcss";
+
+@layer base {
+  :root {
+    --font-serif: 'Newsreader', Georgia, Cambria, 'Times New Roman', serif;
+    --font-sans: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+
+    /* Semântico Graph Studio Design Tokens */
+    --brand-dark: #0a0f1d;
+    --brand-forest: #1a5d38;
+    --brand-forest-light: #23773b;
+    --brand-amber: #f5be38;
+    --brand-amber-hover: #eab308;
+    --brand-yellow: #fdd910;
+    --brand-charcoal: #1e293b;
+    --brand-cream: #f7f5ed;
+    --brand-canvas: #fafaf8;
+    --brand-border: #e2e8f0;
+  }
+
+  body {
+    font-family: var(--font-sans);
+    background-color: var(--brand-canvas);
+    color: #0f172a;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  h1, h2, h3, .font-serif-editorial {
+    font-family: var(--font-serif);
+    letter-spacing: -0.015em;
+  }
+}
+
+/* Fine architectural grid background matching the Graph Studio design system */
+.bg-graph-grid {
+  background-color: #fafaf8;
+  background-image: 
+    linear-gradient(to right, rgba(15, 23, 42, 0.04) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(15, 23, 42, 0.04) 1px, transparent 1px);
+  background-size: 32px 32px;
+}
+
+.bg-graph-grid-dense {
+  background-color: #fafaf8;
+  background-image: 
+    linear-gradient(to right, rgba(15, 23, 42, 0.035) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(15, 23, 42, 0.035) 1px, transparent 1px);
+  background-size: 24px 24px;
+}
+
+.bg-dot-matrix-dark {
+  background-color: #0a0f1d;
+  background-image: radial-gradient(rgba(255, 255, 255, 0.12) 1px, transparent 1px);
+  background-size: 20px 20px;
+}
+
+/* Custom scrollbars with brand tone */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: #f1f5f9;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8;
+}

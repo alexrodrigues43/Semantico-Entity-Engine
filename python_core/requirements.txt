@@ -1,0 +1,18 @@
+# Core Machine Learning & Embeddings
+sentence-transformers>=3.0.0
+torch>=2.2.0
+
+# Zero-Shot Named Entity Recognition
+gliner>=0.2.7
+
+# Data Contracts & Mathematical Operations
+pydantic>=2.6.0
+numpy>=1.26.0
+
+# Web Server & Production API (Antigravity Agent Ready)
+fastapi>=0.110.0
+uvicorn>=0.28.0
+python-multipart>=0.0.9
+
+# Testing & Quality Assurance (Gold Standard Verification)
+pytest>=8.0.0

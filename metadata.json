@@ -1,0 +1,8 @@
+{
+  "name": "Semântico Entity Engine",
+  "description": "Semântico Entity Engine é a plataforma de inteligência ontológica e SEO semântico da Semântico SEO. Ela foi criada para ajudar marcas e profissionais a construir, exportar e usar uma rede semântica de conhecimento para os seus projetos. Unindo modelagem de entidades, reconciliação com Wikidata, grafos de conhecimento e exportação avançada de Schema.org e RDF, o Semântico Entity Engine estrutura o seu conhecimento para a nova era dos motores de busca e inteligências artificiais.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
