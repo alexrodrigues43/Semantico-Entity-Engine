@@ -1,0 +1,14 @@
+.env
+.env.*
+*.env
+env.yaml
+node_modules/
+dist/
+coverage/
+.git/
+.gitignore
+.vscode/
+scratch/
+*.log
+python_core/.venv
+python_core/__pycache__

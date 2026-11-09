@@ -18,6 +18,24 @@ service cloud.firestore {
       return isAuthenticated() && request.auth.uid == userId;
     }
 
+    function isUserActive(userId) {
+      return exists(/databases/$(database)/documents/users/$(userId)) &&
+        get(/databases/$(database)/documents/users/$(userId)).data.status == 'active';
+    }
+
+    function isValidDefinition(definitionId) {
+      return request.resource.data.keys().hasAll(['id', 'entity', 'category', 'definition']) &&
+        request.resource.data.id is string &&
+        request.resource.data.id.size() > 0 &&
+        request.resource.data.id == definitionId &&
+        request.resource.data.entity is string &&
+        request.resource.data.entity.size() > 0 &&
+        request.resource.data.category is string &&
+        request.resource.data.category.size() > 0 &&
+        request.resource.data.definition is string &&
+        request.resource.data.definition.size() > 0;
+    }
+
     match /users/{userId} {
       // User can read their own profile, or Super Admin can read any
       allow get: if isOwner(userId) || isSuperAdmin();
@@ -48,6 +66,20 @@ service cloud.firestore {
       
       // Deletions: only super admin
       allow delete: if isSuperAdmin();
+    }
+
+    match /users/{userId}/definitions/{definitionId} {
+      // Leitura (get, list)
+      allow get, list: if isOwner(userId) || isSuperAdmin();
+
+      // Criação (create)
+      allow create: if ((isOwner(userId) && isUserActive(userId)) || isSuperAdmin()) && isValidDefinition(definitionId);
+
+      // Atualização (update)
+      allow update: if ((isOwner(userId) && isUserActive(userId)) || isSuperAdmin()) && isValidDefinition(definitionId);
+
+      // Exclusão (delete)
+      allow delete: if isOwner(userId) || isSuperAdmin();
     }
   }
 }

@@ -51,9 +51,27 @@ export const ExportModal: React.FC<ExportModalProps> = ({
       .trim()
       .replace(/\s+/g, "-");
 
+  // Escaping helpers for XSS & XML Injection protection
+  const escapeHtml = (unsafe: string = "") =>
+    unsafe
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;")
+      .replace(/'/g, "&#039;");
+
+  const escapeXml = (unsafe: string = "") =>
+    unsafe
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;")
+      .replace(/'/g, "&apos;");
+
   // 1. Generate Sitemap XML (sitemap-glossario.xml)
   const generateSitemap = () => {
     const today = new Date().toISOString().split("T")[0];
+    const safeBase = escapeXml(cleanBase);
     let xml = `<?xml version="1.0" encoding="UTF-8"?>\n`;
     xml += `<!-- Sitemap Semântico para Googlebot & Motores de Busca -->\n`;
     xml += `<!-- Adicione esta URL ao seu robots.txt e Google Search Console -->\n`;
@@ -62,7 +80,7 @@ export const ExportModal: React.FC<ExportModalProps> = ({
     
     // Root glossary index
     xml += `  <url>\n`;
-    xml += `    <loc>${cleanBase}/</loc>\n`;
+    xml += `    <loc>${safeBase}/</loc>\n`;
     xml += `    <lastmod>${today}</lastmod>\n`;
     xml += `    <changefreq>daily</changefreq>\n`;
     xml += `    <priority>1.0</priority>\n`;
@@ -72,7 +90,7 @@ export const ExportModal: React.FC<ExportModalProps> = ({
     definitions.forEach((d) => {
       const slug = slugify(d.entity);
       xml += `  <url>\n`;
-      xml += `    <loc>${cleanBase}/${slug}</loc>\n`;
+      xml += `    <loc>${safeBase}/${escapeXml(slug)}</loc>\n`;
       xml += `    <lastmod>${today}</lastmod>\n`;
       xml += `    <changefreq>weekly</changefreq>\n`;
       xml += `    <priority>0.8</priority>\n`;
@@ -158,12 +176,17 @@ export const ExportModal: React.FC<ExportModalProps> = ({
 
     definitions.forEach((d) => {
       const slug = slugify(d.entity);
-      const safeDef = d.definition.replace(/"/g, '\\"').replace(/\n/g, " ");
+      const safeEntity = d.entity.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
+      const safeCategory = d.category.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
+      const safeDef = d.definition
+        .replace(/\\/g, "\\\\")
+        .replace(/"/g, '\\"')
+        .replace(/\r?\n/g, " ");
       
       ttl += `entity:${slug} a schema:DefinedTerm, skos:Concept ;\n`;
-      ttl += `    rdfs:label "${d.entity}"@pt ;\n`;
-      ttl += `    schema:name "${d.entity}"@pt ;\n`;
-      ttl += `    schema:category "${d.category}"@pt ;\n`;
+      ttl += `    rdfs:label "${safeEntity}"@pt ;\n`;
+      ttl += `    schema:name "${safeEntity}"@pt ;\n`;
+      ttl += `    schema:category "${safeCategory}"@pt ;\n`;
       ttl += `    skos:definition "${safeDef}"@pt ;\n`;
       ttl += `    schema:url <${cleanBase}/${slug}> ;\n`;
       ttl += `    skos:inScheme vocab:Ontology `;
@@ -272,17 +295,33 @@ export const ExportModal: React.FC<ExportModalProps> = ({
     html += `  <dl>\n`;
     definitions.forEach((d) => {
       const slug = slugify(d.entity);
-      const sameAsAttr = d.wikidataUrl ? ` data-sameas="${d.wikidataUrl}"` : "";
-      html += `    <dt class="entity-term" id="${slug}" itemscope itemtype="https://schema.org/DefinedTerm">\n`;
-      html += `      <strong itemprop="name">${d.entity}</strong> <span class="category-badge">(${d.category})</span>\n`;
-      if (d.wikidataId) {
-        html += `      <a href="${d.wikidataUrl || '#'}" class="wikidata-badge" target="_blank" rel="noopener">${d.wikidataId}</a>\n`;
+      const safeEntity = escapeHtml(d.entity);
+      const safeCategory = escapeHtml(d.category);
+      const safeWikidataId = d.wikidataId ? escapeHtml(d.wikidataId) : null;
+      const safeWikidataUrl = d.wikidataUrl ? escapeHtml(d.wikidataUrl) : null;
+      const sameAsAttr = safeWikidataUrl ? ` data-sameas="${safeWikidataUrl}"` : "";
+
+      const paragraphs = d.definition
+        .split(/\n\n+/)
+        .map((p) => `<p itemprop="description">${escapeHtml(p.trim())}</p>`)
+        .join("\n      ");
+
+      html += `    <dt class="entity-term" id="${escapeHtml(slug)}" itemscope itemtype="https://schema.org/DefinedTerm">\n`;
+      html += `      <strong itemprop="name">${safeEntity}</strong> <span class="category-badge">(${safeCategory})</span>\n`;
+      if (safeWikidataId) {
+        html += `      <a href="${safeWikidataUrl || '#'}" class="wikidata-badge" target="_blank" rel="noopener noreferrer">${safeWikidataId}</a>\n`;
       }
       html += `    </dt>\n`;
       html += `    <dd class="entity-def"${sameAsAttr}>\n`;
-      html += `      <p itemprop="description">${d.definition.replace(/\n\n/g, "</p>\n      <p itemprop=\"description\">")}</p>\n`;
+      html += `      ${paragraphs}\n`;
       if (d.sources && d.sources.length > 0) {
-        html += `      <div class="entity-sources"><small>Fontes: ${d.sources.map((s) => `<a href="${s}" target="_blank" rel="noopener">${s}</a>`).join(", ")}</small></div>\n`;
+        const sourcesHtml = d.sources
+          .map(
+            (s) =>
+              `<a href="${escapeHtml(s)}" target="_blank" rel="noopener noreferrer">${escapeHtml(s)}</a>`
+          )
+          .join(", ");
+        html += `      <div class="entity-sources"><small>Fontes: ${sourcesHtml}</small></div>\n`;
       }
       html += `    </dd>\n`;
     });

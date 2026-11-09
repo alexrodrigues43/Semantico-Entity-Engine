@@ -38,10 +38,10 @@ export const SubscriptionPaywallModal: React.FC<SubscriptionPaywallModalProps> =
   // Pre-configured whatsapp link
   const whatsappNumber = "5511999999999"; // fallback or admin WhatsApp
   const whatsappText = encodeURIComponent(
-    `Olá! Criei minha conta no Semântico Entity Engine (${user?.email || "novo usuário"}) e gostaria de solicitar a liberação da minha assinatura.`
+    `Olá! Criei minha conta no Gerador de Glossário de Entidades (${user?.email || "novo usuário"}) e gostaria de solicitar a liberação da minha assinatura.`
   );
   const whatsappUrl = `https://wa.me/${whatsappNumber}?text=${whatsappText}`;
-  const mailtoUrl = `mailto:alexrodrigues43@gmail.com?subject=Liberação de Acesso - Semântico Entity Engine&body=Olá Alex,%0D%0A%0D%0AGostaria de solicitar a liberação do acesso para a conta: ${user?.email || ""}%0D%0ANome: ${user?.displayName || ""}`;
+  const mailtoUrl = `mailto:contato@semantico.com.br?subject=Liberação de Acesso - Gerador de Glossário de Entidades&body=Olá,%0D%0A%0D%0AGostaria de solicitar a liberação do acesso para a conta: ${user?.email || ""}%0D%0ANome: ${user?.displayName || ""}`;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-in fade-in duration-200">

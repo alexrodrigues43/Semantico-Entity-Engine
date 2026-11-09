@@ -16,6 +16,26 @@
         "notes": { "type": "string", "description": "Internal admin notes, e.g. PIX date, invoice or contact" },
         "toolUsageCount": { "type": "number", "description": "Count of AI tool and generation executions" }
       }
+    },
+    "Definition": {
+      "collection": "users/{userId}/definitions",
+      "fields": {
+        "id": { "type": "string", "description": "Canonical identifier for the entity definition" },
+        "entity": { "type": "string", "description": "Canonical named entity term" },
+        "category": { "type": "string", "description": "Thematic or ontological category" },
+        "definition": { "type": "string", "description": "Authoritative semantic definition" },
+        "shortSummary": { "type": "string", "description": "Concise summary for snippets" },
+        "sources": { "type": "array", "description": "Authoritative reference URLs" },
+        "sourcesString": { "type": "string", "description": "Formatted sources string" },
+        "schemaType": { "type": "string", "description": "Schema.org type (DefinedTerm, TechArticle, etc.)" },
+        "wikidataId": { "type": "string", "description": "Wikidata QID (e.g., Q28865)" },
+        "wikidataUrl": { "type": "string", "description": "Wikidata canonical URL" },
+        "wikipediaUrl": { "type": "string", "description": "Wikipedia entry URL" },
+        "googleMid": { "type": "string", "description": "Google Knowledge Graph Machine ID" },
+        "googleKgUrl": { "type": "string", "description": "Google Knowledge Graph search URL" },
+        "sameAs": { "type": "array", "description": "Array of authority sameAs URLs" },
+        "semanticTriplets": { "type": "array", "description": "RDF semantic triplets (subject, predicate, object)" }
+      }
     }
   }
 }

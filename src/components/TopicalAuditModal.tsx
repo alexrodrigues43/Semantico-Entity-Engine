@@ -365,6 +365,35 @@ export const TopicalAuditModal: React.FC<TopicalAuditModalProps> = ({
 
               </div>
 
+              {/* Python Core Engine Mathematical Metrics (if content was provided) */}
+              {auditReport.qualityMetrics && (
+                <div className="bg-slate-900 text-white rounded-xl p-3.5 border border-slate-800 shadow-sm flex flex-col md:flex-row items-center justify-between gap-3 text-xs">
+                  <div className="flex items-center gap-2.5">
+                    <div className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse" />
+                    <div>
+                      <span className="font-bold text-white mr-1.5">Motor Semântico Rigoroso (FastAPI/PoolParty):</span>
+                      <span className="text-slate-300">
+                        {auditReport.qualityMetrics.isPythonEngineLive ? "Python Core Online" : "Cálculo Matemático Simbólico"}
+                      </span>
+                    </div>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-2.5 text-[11px] font-mono">
+                    <span className="bg-slate-800 px-2 py-0.5 rounded border border-slate-700">
+                      Densidade: <strong className="text-emerald-400">{(auditReport.qualityMetrics.entity_density * 100).toFixed(1)}%</strong>
+                    </span>
+                    <span className="bg-slate-800 px-2 py-0.5 rounded border border-slate-700">
+                      Fluff Penalty: <strong className="text-amber-400">{(auditReport.qualityMetrics.vagueness_penalty * 100).toFixed(1)}%</strong>
+                    </span>
+                    <span className="bg-slate-800 px-2 py-0.5 rounded border border-slate-700">
+                      Multiplicador: <strong className="text-cyan-400">{auditReport.qualityMetrics.quality_multiplier}x</strong>
+                    </span>
+                    <span className="bg-slate-800 px-2 py-0.5 rounded border border-slate-700">
+                      Buzzwords: <strong className="text-rose-400">{auditReport.qualityMetrics.buzzword_count}</strong>
+                    </span>
+                  </div>
+                </div>
+              )}
+
               {/* Tabs Switcher */}
               <div className="border-b border-slate-200 flex items-center justify-between">
                 <div className="flex gap-4">

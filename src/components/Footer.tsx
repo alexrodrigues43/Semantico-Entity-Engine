@@ -24,27 +24,36 @@ export const Footer: React.FC<FooterProps> = ({ onOpenSingleModal, onScrollToSec
 
         {/* Navigation Links */}
         <nav className="flex items-center justify-center flex-wrap gap-x-6 gap-y-2 text-xs font-medium text-slate-600">
-          <button 
-            onClick={() => onScrollToSection ? onScrollToSection("section-solucao") : null}
+          <a 
+            href="https://semantico.com.br/semantico-seo.html"
+            target="_blank"
+            rel="noopener noreferrer"
             className="hover:text-slate-900 transition-colors cursor-pointer"
           >
             Missão
-          </button>
-          <button 
-            onClick={() => onScrollToSection ? onScrollToSection("section-beneficios") : null}
+          </a>
+          <a 
+            href="https://semantico.com.br/servicos.html"
+            target="_blank"
+            rel="noopener noreferrer"
             className="hover:text-slate-900 transition-colors cursor-pointer"
           >
             Serviços
-          </button>
+          </a>
           <a 
             href="mailto:contato@semantico.com.br"
             className="hover:text-slate-900 transition-colors cursor-pointer"
           >
             Contato
           </a>
-          <span className="text-slate-800 font-semibold">
+          <a 
+            href="https://semantico.com.br/alexander-rodrigues-silva.html"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="hover:text-slate-900 font-semibold transition-colors cursor-pointer"
+          >
             Alex Rodrigues
-          </span>
+          </a>
         </nav>
 
         {/* Copyright */}

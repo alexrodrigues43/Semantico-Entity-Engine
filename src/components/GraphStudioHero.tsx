@@ -35,20 +35,18 @@ export const GraphStudioHero: React.FC<GraphStudioHeroProps> = ({
         {/* Release Pill Badge */}
         <div className="inline-flex items-center gap-2 px-3.5 py-1 rounded-full bg-white border border-slate-300/80 shadow-2xs mb-6 text-xs font-medium text-slate-700">
           <span className="w-2 h-2 rounded-full bg-[#1a5d38] animate-pulse" />
-          <span className="tracking-wide">Graph Studio Release</span>
+          <span className="tracking-wide">Semântico SEO · Engenharia de Conhecimento</span>
         </div>
 
         {/* Editorial Serif Headline */}
         <h1 className="font-serif text-4xl sm:text-6xl lg:text-7xl font-normal text-[#0a0f1d] tracking-tight leading-[1.15] mb-6">
-          Transforme seus textos em{" "}
-          <span className="text-[#1a5d38] font-normal">ativos de conhecimento</span>{" "}
-          conectados.
+          Gerador de Glossário de{" "}
+          <span className="text-[#1a5d38] font-normal">Entidades</span>
         </h1>
 
         {/* Subtitle */}
-        <p className="text-slate-600 text-base sm:text-lg max-w-2xl mx-auto leading-relaxed mb-8">
-          Não apenas escreva conteúdo. Construa autoridade com SEO Semântico que funciona de verdade,
-          garantindo que suas ideias sejam compreendidas por humanos e buscadores (com ou sem IA).
+        <p className="text-slate-600 text-base sm:text-lg max-w-3xl mx-auto leading-relaxed mb-8">
+          Construa autoridade com SEO Semântico que funciona de verdade, garantindo que suas ideias sejam compreendidas por humanos, buscadores e modelos de IA.
         </p>
 
         {/* Hero CTAs */}
@@ -57,7 +55,7 @@ export const GraphStudioHero: React.FC<GraphStudioHeroProps> = ({
             onClick={onStartTesting}
             className="px-6 py-3 rounded-xl bg-[#0a0f1d] hover:bg-[#1a233a] text-white text-sm font-semibold shadow-sm hover:shadow-md transition-all cursor-pointer flex items-center gap-2 active:scale-98"
           >
-            <span>Quero testar a ferramenta agora</span>
+            <span>Use a ferramenta agora</span>
             <ArrowRight className="w-4 h-4 text-[#f5be38]" />
           </button>
 
@@ -184,11 +182,11 @@ export const GraphStudioHero: React.FC<GraphStudioHeroProps> = ({
         </span>
 
         <h2 className="font-serif text-3xl sm:text-5xl text-[#0a0f1d] font-normal tracking-tight mb-4">
-          O que é o Graph Studio?
+          O que é o Gerador de Entidades?
         </h2>
 
         <p className="text-slate-600 text-sm sm:text-base max-w-2xl mx-auto leading-relaxed mb-10">
-          O Graph Studio é a sua interface inteligente para transformar textos não estruturados em uma rede
+          O Gerador é a sua interface inteligente para transformar textos não estruturados em uma rede
           poderosa de conhecimento. Através do mapeamento visual de entidades e relações, elevamos o nível do seu SEO Semântico.
         </p>
 
@@ -388,7 +386,7 @@ export const GraphStudioHero: React.FC<GraphStudioHeroProps> = ({
               onClick={onStartTesting}
               className="px-7 py-3.5 rounded-xl bg-[#f5be38] hover:bg-[#eab308] text-slate-950 font-bold text-sm shadow-sm transition-all cursor-pointer active:scale-98"
             >
-              Clique aqui para testar a ferramenta
+              Use a ferramenta agora
             </button>
           </div>
         </div>

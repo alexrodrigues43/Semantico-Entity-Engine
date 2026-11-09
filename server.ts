@@ -3,13 +3,191 @@ import path from "path";
 import { createServer as createViteServer } from "vite";
 import { GoogleGenAI, Type } from "@google/genai";
 import dotenv from "dotenv";
+import helmet from "helmet";
+import rateLimit from "express-rate-limit";
+import { initializeApp as initAdminApp, getApps as getAdminApps } from "firebase-admin/app";
+import { getAuth as getAdminAuth } from "firebase-admin/auth";
 
 dotenv.config();
 
 const app = express();
-const PORT = 3000;
+const PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : 3000;
+
+// Security Headers via Helmet (com COOP e CORP desabilitados para compatibilidade com Google Sign-In Popup e avatares)
+app.use(
+  helmet({
+    contentSecurityPolicy: false, // Mantido falso para compatibilidade com Vite dev server e fontes remotas
+    crossOriginEmbedderPolicy: false,
+    crossOriginOpenerPolicy: false, // Desabilitado para permitir popups OAuth (Google Sign-In) sem fechar a janela do opener
+    crossOriginResourcePolicy: false, // Permite carregar avatares e recursos de terceiros (lh3.googleusercontent.com)
+  })
+);
+
+// Limitação de Taxa (Rate Limiting)
+const generalLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 300,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: "Muitas requisições enviadas por este IP. Tente novamente em alguns minutos." },
+});
+
+const aiGenerationLimiter = rateLimit({
+  windowMs: 1 * 60 * 1000,
+  max: 45,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: "Limite de chamadas de IA por minuto atingido. Aguarde um momento para continuar." },
+});
+
+app.use("/api/", generalLimiter);
+app.use("/api/seo-definitions/", aiGenerationLimiter);
 
 app.use(express.json({ limit: "10mb" }));
+
+// Inicialização segura do Firebase Admin SDK
+const FIREBASE_PROJECT_ID = process.env.FIREBASE_PROJECT_ID || "blogsemantico-1750525854725";
+let adminApp: any = null;
+if (!getAdminApps().length) {
+  try {
+    adminApp = initAdminApp({
+      projectId: FIREBASE_PROJECT_ID,
+    });
+    console.log(`[Firebase Admin] Inicializado com sucesso para o projeto: ${FIREBASE_PROJECT_ID}`);
+  } catch (err: any) {
+    console.warn("[Firebase Admin] Inicializado sem credenciais de serviço:", err.message);
+  }
+} else {
+  adminApp = getAdminApps()[0];
+}
+
+// Middleware de Autenticação e RBAC para as rotas protegidas de IA e SEO
+async function requireAuth(req: express.Request, res: express.Response, next: express.NextFunction) {
+  const authHeader = req.headers.authorization;
+  const passcodeHeader = req.headers["x-passcode"] as string | undefined;
+
+  const envAdminPass = (process.env.ADMIN_PASSWORD || "").trim();
+  const envBetaPasses = (process.env.BETA_PASSCODES || "")
+    .split(",")
+    .map((p) => p.trim())
+    .filter(Boolean);
+
+  // 1. Verificação por Passcode
+  let providedPasscode: string | null = null;
+  if (passcodeHeader) {
+    providedPasscode = passcodeHeader.trim();
+  } else if (authHeader && authHeader.startsWith("Bearer passcode:")) {
+    providedPasscode = authHeader.replace("Bearer passcode:", "").trim();
+  }
+
+  if (providedPasscode) {
+    const isPasscodeValid =
+      (Boolean(envAdminPass) && providedPasscode === envAdminPass) ||
+      envBetaPasses.includes(providedPasscode);
+
+    if (isPasscodeValid) {
+      (req as any).user = {
+        role: Boolean(envAdminPass) && providedPasscode === envAdminPass ? "admin" : "beta",
+        authMethod: "passcode",
+      };
+      return next();
+    }
+  }
+
+  // 2. Verificação por Firebase ID Token
+  if (authHeader && authHeader.startsWith("Bearer ") && !authHeader.startsWith("Bearer passcode:")) {
+    const idToken = authHeader.replace("Bearer ", "").trim();
+    if (idToken) {
+      try {
+        const decodedToken = await getAdminAuth(adminApp).verifyIdToken(idToken);
+        (req as any).user = {
+          uid: decodedToken.uid,
+          email: decodedToken.email,
+          authMethod: "firebase",
+        };
+        return next();
+      } catch (err: any) {
+        console.warn(`[Auth] Token Firebase inválido ou expirado: ${err.message}`);
+        return res.status(401).json({
+          error: "Sessão inválida ou expirada. Faça login novamente.",
+        });
+      }
+    }
+  }
+
+  // 3. Fallback permissivo para ambiente de desenvolvimento local
+  if (process.env.NODE_ENV !== "production") {
+    return next();
+  }
+
+  return res.status(401).json({
+    error: "Acesso não autorizado. É necessário estar autenticado para utilizar os serviços de IA.",
+  });
+}
+
+app.use("/api/seo-definitions", requireAuth);
+
+// ==========================================
+// PYTHON CORE ENGINE CLIENT (FASTAPI /api/quality-metrics)
+// ==========================================
+const PYTHON_CORE_URL = process.env.PYTHON_CORE_URL || "http://localhost:8000";
+
+interface PythonQualityMetrics {
+  total_tokens: number;
+  entity_token_count: number;
+  buzzword_count: number;
+  entity_density: number;
+  vagueness_penalty: number;
+  quality_multiplier: number;
+  isPythonEngineLive: boolean;
+}
+
+async function fetchPythonQualityMetrics(text: string, entityTokens: number = 0): Promise<PythonQualityMetrics> {
+  try {
+    const resp = await fetch(`${PYTHON_CORE_URL}/api/quality-metrics`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ text, entity_tokens: entityTokens }),
+      signal: AbortSignal.timeout(2000),
+    });
+    if (resp.ok) {
+      const data: any = await resp.json();
+      return {
+        ...data,
+        isPythonEngineLive: true,
+      };
+    }
+  } catch (err) {
+    // Graceful offline fallback to TypeScript-based mathematical calculation
+  }
+
+  // TypeScript heuristic fallback implementing the exact mathematical formula of InformationDensityScorer
+  const clean = text.toLowerCase();
+  const words = clean.match(/\b\w+\b/g) || [];
+  const totalTokens = Math.max(words.length, 1);
+  const buzzwords = [
+    "alavancar", "sinergia", "holístico", "disrupção", "ecossistema",
+    "mindset", "paradigma", "game-changer", "empoderamento", "valor agregado",
+    "excelência", "inovação contínua", "foco no cliente", "best-in-class",
+    "transformar paradigmas", "diferenciais competitivos sustentáveis"
+  ];
+  const buzzwordMatches = buzzwords.filter(bw => clean.includes(bw)).length;
+  const vaguenessRatio = Math.min(buzzwordMatches / (totalTokens * 0.15 + 1), 1.0);
+  const entityDensity = Math.min(entityTokens / totalTokens, 1.0);
+  const penaltyFactor = 1.0 - (0.45 * vaguenessRatio);
+  const bonusFactor = 1.0 + (0.35 * entityDensity);
+  const finalMultiplier = Math.max(penaltyFactor * bonusFactor, 0.05);
+
+  return {
+    total_tokens: totalTokens,
+    entity_token_count: entityTokens,
+    buzzword_count: buzzwordMatches,
+    entity_density: Number(entityDensity.toFixed(4)),
+    vagueness_penalty: Number(vaguenessRatio.toFixed(4)),
+    quality_multiplier: Number(finalMultiplier.toFixed(4)),
+    isPythonEngineLive: false,
+  };
+}
 
 // Server-side Gemini AI client initialization
 function getGeminiClient() {
@@ -1047,10 +1225,30 @@ SUA MISSÃO DE AUDITORIA:
       };
     }
 
+    if (content && typeof content === "string") {
+      const qMetrics = await fetchPythonQualityMetrics(content, existingEntities.length);
+      auditResult.qualityMetrics = qMetrics;
+    }
+
     res.json(auditResult);
   } catch (error: any) {
     console.error("Erro na rota /api/seo-definitions/audit-topical-gaps:", error);
     res.status(500).json({ error: "Falha na auditoria de lacunas tópicas." });
+  }
+});
+
+// Endpoint: Content Quality & Fluff Penalty Metrics (Python FastAPI Engine)
+app.post("/api/seo-definitions/quality-metrics", async (req, res) => {
+  try {
+    const { text = "", entity_tokens = 0 } = req.body;
+    if (!text || typeof text !== "string") {
+      return res.status(400).json({ error: "O parâmetro 'text' é obrigatório." });
+    }
+    const metrics = await fetchPythonQualityMetrics(text, Number(entity_tokens) || 0);
+    res.json(metrics);
+  } catch (error: any) {
+    console.error("Erro na rota /api/seo-definitions/quality-metrics:", error);
+    res.status(500).json({ error: "Falha na análise métrica de qualidade." });
   }
 });
 
@@ -1285,10 +1483,15 @@ Sua missão:
 async function reconcileWithWikidataApi(entityName: string, category: string = "") {
   try {
     const cleanQuery = entityName.trim();
+    const WIKIDATA_USER_AGENT =
+      process.env.WIKIDATA_USER_AGENT ||
+      "SemanticoSEO-EntityEngine/2.0 (https://semantico.com.br)";
+
     // 1. Search in Portuguese first
     let searchUrl = `https://www.wikidata.org/w/api.php?action=wbsearchentities&search=${encodeURIComponent(cleanQuery)}&language=pt&format=json&limit=5&uselang=pt`;
     let response = await fetch(searchUrl, {
-      headers: { "User-Agent": "SemanticoSEO-Reconciler/2.0 (alexrodrigues43@gmail.com)" },
+      headers: { "User-Agent": WIKIDATA_USER_AGENT },
+      signal: AbortSignal.timeout(10000),
     });
     let data: any = await response.json();
     let results = data.search || [];
@@ -1297,7 +1500,8 @@ async function reconcileWithWikidataApi(entityName: string, category: string = "
     if (results.length === 0) {
       searchUrl = `https://www.wikidata.org/w/api.php?action=wbsearchentities&search=${encodeURIComponent(cleanQuery)}&language=en&format=json&limit=5&uselang=en`;
       response = await fetch(searchUrl, {
-        headers: { "User-Agent": "SemanticoSEO-Reconciler/2.0 (alexrodrigues43@gmail.com)" },
+        headers: { "User-Agent": WIKIDATA_USER_AGENT },
+        signal: AbortSignal.timeout(10000),
       });
       data = await response.json();
       results = data.search || [];
@@ -1310,7 +1514,8 @@ async function reconcileWithWikidataApi(entityName: string, category: string = "
     const ids = results.slice(0, 3).map((r: any) => r.id).join("|");
     const detailUrl = `https://www.wikidata.org/w/api.php?action=wbgetentities&ids=${ids}&props=claims|sitelinks/urls|descriptions|labels|aliases&languages=pt|en&format=json`;
     const detailRes = await fetch(detailUrl, {
-      headers: { "User-Agent": "SemanticoSEO-Reconciler/2.0 (alexrodrigues43@gmail.com)" },
+      headers: { "User-Agent": WIKIDATA_USER_AGENT },
+      signal: AbortSignal.timeout(10000),
     });
     const detailData: any = await detailRes.json();
     const entitiesObj = detailData.entities || {};
@@ -1719,10 +1924,9 @@ app.post("/api/auth/verify", (req, res) => {
 
     const cleanPasscode = passcode.trim();
     
-    // Configured admin passwords
+    // Configured admin password from environment
     const envAdminPass = (process.env.ADMIN_PASSWORD || "").trim();
-    const defaultAdminPasses = ["semantico-admin", "semantico2025", "admin", "admin2025", "semantico-master"];
-    const isAdmin = (envAdminPass && cleanPasscode === envAdminPass) || defaultAdminPasses.includes(cleanPasscode.toLowerCase());
+    const isAdmin = Boolean(envAdminPass) && cleanPasscode === envAdminPass;
 
     if (isAdmin) {
       return res.json({
@@ -1740,15 +1944,13 @@ app.post("/api/auth/verify", (req, res) => {
       });
     }
 
-    // Configured beta tester passcodes
+    // Configured beta tester passcodes from environment
     const envBetaPasses = (process.env.BETA_PASSCODES || "")
       .split(",")
-      .map((p) => p.trim().toLowerCase())
+      .map((p) => p.trim())
       .filter(Boolean);
-    const defaultBetaPasses = ["beta2025", "testador", "semantico-beta", "beta-vip", "beta-tester", "convidado", "semantico", "beta"];
-    const allBetaPasses = Array.from(new Set([...envBetaPasses, ...defaultBetaPasses]));
 
-    const isBeta = allBetaPasses.includes(cleanPasscode.toLowerCase());
+    const isBeta = envBetaPasses.includes(cleanPasscode);
 
     if (isBeta) {
       return res.json({

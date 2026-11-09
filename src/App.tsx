@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, Suspense, lazy } from "react";
 import { onAuthStateChanged } from "firebase/auth";
 import { doc, onSnapshot, collection, query } from "firebase/firestore";
 import { 
@@ -11,26 +11,62 @@ import {
   db, 
   syncUserProfile, 
   logoutUser, 
-  incrementUserToolUsage 
+  incrementUserToolUsage,
+  saveUserEntity,
+  batchSaveUserDefinitions,
+  deleteUserEntity,
+  subscribeUserDefinitions
 } from "./lib/firebase";
 import { Navbar } from "./components/Navbar";
 import { DefinitionsTable } from "./components/DefinitionsTable";
-import { SingleGeneratorModal } from "./components/SingleGeneratorModal";
-import { BatchGeneratorModal } from "./components/BatchGeneratorModal";
-import { EntityDetailModal } from "./components/EntityDetailModal";
-import { PromptManagerModal } from "./components/PromptManagerModal";
-import { ExportModal } from "./components/ExportModal";
-import { KnowledgeGraphView } from "./components/KnowledgeGraphView";
-import { InternalLinkingView } from "./components/InternalLinkingView";
-import { IdeasAndPossibilitiesView } from "./components/IdeasAndPossibilitiesView";
-import { RelationshipSuggesterModal } from "./components/RelationshipSuggesterModal";
-import { WikidataReconcileModal } from "./components/WikidataReconcileModal";
-import { TopicalAuditModal } from "./components/TopicalAuditModal";
-import { AuthModal } from "./components/AuthModal";
-import { SubscriptionPaywallModal } from "./components/SubscriptionPaywallModal";
-import { AdminSubscriptionsModal } from "./components/AdminSubscriptionsModal";
 import { GraphStudioHero } from "./components/GraphStudioHero";
 import { Footer } from "./components/Footer";
+
+// Lazy-loaded secondary views (code-split)
+const KnowledgeGraphView = lazy(() =>
+  import("./components/KnowledgeGraphView").then((m) => ({ default: m.KnowledgeGraphView }))
+);
+const InternalLinkingView = lazy(() =>
+  import("./components/InternalLinkingView").then((m) => ({ default: m.InternalLinkingView }))
+);
+const IdeasAndPossibilitiesView = lazy(() =>
+  import("./components/IdeasAndPossibilitiesView").then((m) => ({ default: m.IdeasAndPossibilitiesView }))
+);
+
+// Lazy-loaded on-demand modals (code-split)
+const SingleGeneratorModal = lazy(() =>
+  import("./components/SingleGeneratorModal").then((m) => ({ default: m.SingleGeneratorModal }))
+);
+const BatchGeneratorModal = lazy(() =>
+  import("./components/BatchGeneratorModal").then((m) => ({ default: m.BatchGeneratorModal }))
+);
+const EntityDetailModal = lazy(() =>
+  import("./components/EntityDetailModal").then((m) => ({ default: m.EntityDetailModal }))
+);
+const PromptManagerModal = lazy(() =>
+  import("./components/PromptManagerModal").then((m) => ({ default: m.PromptManagerModal }))
+);
+const ExportModal = lazy(() =>
+  import("./components/ExportModal").then((m) => ({ default: m.ExportModal }))
+);
+const RelationshipSuggesterModal = lazy(() =>
+  import("./components/RelationshipSuggesterModal").then((m) => ({ default: m.RelationshipSuggesterModal }))
+);
+const WikidataReconcileModal = lazy(() =>
+  import("./components/WikidataReconcileModal").then((m) => ({ default: m.WikidataReconcileModal }))
+);
+const TopicalAuditModal = lazy(() =>
+  import("./components/TopicalAuditModal").then((m) => ({ default: m.TopicalAuditModal }))
+);
+const AuthModal = lazy(() =>
+  import("./components/AuthModal").then((m) => ({ default: m.AuthModal }))
+);
+const SubscriptionPaywallModal = lazy(() =>
+  import("./components/SubscriptionPaywallModal").then((m) => ({ default: m.SubscriptionPaywallModal }))
+);
+const AdminSubscriptionsModal = lazy(() =>
+  import("./components/AdminSubscriptionsModal").then((m) => ({ default: m.AdminSubscriptionsModal }))
+);
 import { initialDefinitions, promptPresets } from "./data/initialData";
 import { 
   SeoEntityDefinition, 
@@ -131,6 +167,7 @@ export default function App() {
   useEffect(() => {
     let unsubscribeDoc: (() => void) | null = null;
     let unsubscribeUsersList: (() => void) | null = null;
+    let unsubscribeDefs: (() => void) | null = null;
 
     const unsubscribeAuth = onAuthStateChanged(auth, async (firebaseUser) => {
       if (unsubscribeDoc) {
@@ -140,6 +177,10 @@ export default function App() {
       if (unsubscribeUsersList) {
         unsubscribeUsersList();
         unsubscribeUsersList = null;
+      }
+      if (unsubscribeDefs) {
+        unsubscribeDefs();
+        unsubscribeDefs = null;
       }
 
       if (firebaseUser) {
@@ -175,6 +216,36 @@ export default function App() {
               }
             }
           });
+
+          // Sincronização em tempo real das entidades do glossário do usuário com Cloud Firestore
+          unsubscribeDefs = subscribeUserDefinitions(
+            firebaseUser.uid,
+            (cloudDefs) => {
+              if (cloudDefs && cloudDefs.length > 0) {
+                setDefinitions(cloudDefs);
+                try {
+                  localStorage.setItem(STORAGE_KEY, JSON.stringify(cloudDefs));
+                } catch (e) {
+                  console.warn("Falha ao salvar cache no localStorage:", e);
+                }
+              } else {
+                // Se a nuvem estiver vazia para o usuário, migra o repositório local para o Firestore
+                const localDefs = (() => {
+                  try {
+                    const saved = localStorage.getItem(STORAGE_KEY);
+                    if (saved) return JSON.parse(saved);
+                  } catch {}
+                  return initialDefinitions;
+                })();
+                if (localDefs && localDefs.length > 0) {
+                  batchSaveUserDefinitions(firebaseUser.uid, localDefs).catch(console.error);
+                }
+              }
+            },
+            (err) => {
+              console.warn("Usando repositório offline (localStorage):", err.message);
+            }
+          );
         } catch (err) {
           console.error("Erro ao sincronizar perfil com Firebase:", err);
         }
@@ -187,6 +258,7 @@ export default function App() {
       unsubscribeAuth();
       if (unsubscribeDoc) unsubscribeDoc();
       if (unsubscribeUsersList) unsubscribeUsersList();
+      if (unsubscribeDefs) unsubscribeDefs();
     };
   }, []);
 
@@ -232,16 +304,25 @@ export default function App() {
       }
       return [entity, ...prev];
     });
+    if (userProfile?.uid) {
+      saveUserEntity(userProfile.uid, entity).catch(console.error);
+    }
     showToast(`Entidade "${entity.entity}" salva com sucesso!`);
   };
 
   const handleAddBatch = (newEntities: SeoEntityDefinition[]) => {
     setDefinitions((prev) => [...newEntities, ...prev]);
+    if (userProfile?.uid) {
+      batchSaveUserDefinitions(userProfile.uid, newEntities).catch(console.error);
+    }
     showToast(`${newEntities.length} entidades geradas e adicionadas ao glossário!`);
   };
 
   const handleDeleteEntity = (id: string) => {
     setDefinitions((prev) => prev.filter((d) => d.id !== id));
+    if (userProfile?.uid) {
+      deleteUserEntity(userProfile.uid, id).catch(console.error);
+    }
     showToast("Entidade excluída do repositório.", "info");
   };
 
@@ -254,10 +335,14 @@ export default function App() {
             (t) => t.predicate === triplet.predicate && t.object === triplet.object
           );
           if (exists) return item;
-          return {
+          const updated = {
             ...item,
             semanticTriplets: [...currentTriplets, triplet],
           };
+          if (userProfile?.uid) {
+            saveUserEntity(userProfile.uid, updated).catch(console.error);
+          }
+          return updated;
         }
         return item;
       })
@@ -283,6 +368,9 @@ export default function App() {
           }
         }
       });
+      if (userProfile?.uid) {
+        batchSaveUserDefinitions(userProfile.uid, updated).catch(console.error);
+      }
       return updated;
     });
 
@@ -297,7 +385,7 @@ export default function App() {
           const newLinks = [match.wikidataUrl, match.wikipediaUrl, ...(match.sameAsUrls || [])].filter(Boolean) as string[];
           const combinedSameAs = Array.from(new Set([...existingSameAs, ...newLinks]));
 
-          return {
+          const updated = {
             ...item,
             wikidataId: match.wikidataId,
             wikidataUrl: match.wikidataUrl,
@@ -305,6 +393,10 @@ export default function App() {
             wikidataDescription: match.description,
             sameAs: combinedSameAs,
           };
+          if (userProfile?.uid) {
+            saveUserEntity(userProfile.uid, updated).catch(console.error);
+          }
+          return updated;
         }
         return item;
       })
@@ -333,6 +425,9 @@ export default function App() {
           };
         }
       });
+      if (userProfile?.uid) {
+        batchSaveUserDefinitions(userProfile.uid, updated).catch(console.error);
+      }
       return updated;
     });
     showToast(`${updates.length} entidades reconciliadas com Wikidata em lote!`);
@@ -345,6 +440,9 @@ export default function App() {
     if (selectedEntityForDetail && selectedEntityForDetail.id === updatedEntity.id) {
       setSelectedEntityForDetail(updatedEntity);
     }
+    if (userProfile?.uid) {
+      saveUserEntity(userProfile.uid, updatedEntity).catch(console.error);
+    }
     showToast("Entidade atualizada com sucesso!");
   };
 
@@ -352,7 +450,7 @@ export default function App() {
     setDefinitions((prev) =>
       prev.map((item) => {
         if (item.id === entityId) {
-          return {
+          const updated = {
             ...item,
             wikidataId: undefined,
             wikidataUrl: undefined,
@@ -360,6 +458,10 @@ export default function App() {
             wikidataDescription: undefined,
             sameAs: [],
           };
+          if (userProfile?.uid) {
+            saveUserEntity(userProfile.uid, updated).catch(console.error);
+          }
+          return updated;
         }
         return item;
       })
@@ -382,6 +484,8 @@ export default function App() {
   };
 
   const handleRegenerateEntity = async (id: string) => {
+    if (!checkSubscription("Regenerar Entidade")) return;
+
     const item = definitions.find((d) => d.id === id);
     if (!item) return;
 
@@ -410,28 +514,32 @@ export default function App() {
       }
 
       const data = await response.json();
+
+      const updatedEntity: SeoEntityDefinition = {
+        ...item,
+        definition: data.definition || data.expandedDefinition || data.shortDefinition || item.definition,
+        shortSummary: data.shortSummary || data.shortDefinition || item.shortSummary,
+        sources: data.sources || item.sources || [],
+        sourcesString: data.sourcesString || item.sourcesString,
+        lsiKeywords: data.lsiKeywords || data.synonyms || item.lsiKeywords || [],
+        schemaType: data.schemaType || item.schemaType,
+        sameAs: data.sameAs || data.sameAsLinks || item.sameAs || [],
+        semanticTriplets: data.semanticTriplets || item.semanticTriplets || [],
+        wikidataId: data.wikidataId || item.wikidataId,
+        wikidataUrl: data.wikidataUrl || item.wikidataUrl,
+        wikipediaUrl: data.wikipediaUrl || item.wikipediaUrl,
+        wikidataDescription: data.wikidataDescription || item.wikidataDescription,
+        status: "completed",
+      };
+
       setDefinitions((prev) =>
-        prev.map((d) =>
-          d.id === id
-            ? {
-                ...d,
-                definition: data.definition || data.expandedDefinition || data.shortDefinition || d.definition,
-                shortSummary: data.shortSummary || data.shortDefinition || d.shortSummary,
-                sources: data.sources || d.sources || [],
-                sourcesString: data.sourcesString || d.sourcesString,
-                lsiKeywords: data.lsiKeywords || data.synonyms || d.lsiKeywords || [],
-                schemaType: data.schemaType || d.schemaType,
-                sameAs: data.sameAs || data.sameAsLinks || d.sameAs || [],
-                semanticTriplets: data.semanticTriplets || d.semanticTriplets || [],
-                wikidataId: data.wikidataId || d.wikidataId,
-                wikidataUrl: data.wikidataUrl || d.wikidataUrl,
-                wikipediaUrl: data.wikipediaUrl || d.wikipediaUrl,
-                wikidataDescription: data.wikidataDescription || d.wikidataDescription,
-                status: "completed",
-              }
-            : d
-        )
+        prev.map((d) => (d.id === id ? updatedEntity : d))
       );
+
+      if (userProfile?.uid) {
+        saveUserEntity(userProfile.uid, updatedEntity).catch(console.error);
+      }
+
       showToast(`Entidade "${item.entity}" regenerada com sucesso!`);
     } catch (e) {
       console.error(e);
@@ -593,43 +701,64 @@ export default function App() {
 
         {activeView === "graph" && (
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
-            <KnowledgeGraphView
-              definitions={definitions}
-              onSelectEntity={(entity) => setSelectedEntityForDetail(entity)}
-              onOpenRelationshipSuggester={handleOpenRelationshipSuggester}
-            />
+            <Suspense fallback={
+              <div className="p-16 text-center text-slate-500 text-xs flex flex-col items-center justify-center gap-2">
+                <div className="w-5 h-5 border-2 border-emerald-600 border-t-transparent rounded-full animate-spin" />
+                <span>Carregando Grafo de Conhecimento e Topologia...</span>
+              </div>
+            }>
+              <KnowledgeGraphView
+                definitions={definitions}
+                onSelectEntity={(entity) => setSelectedEntityForDetail(entity)}
+                onOpenRelationshipSuggester={handleOpenRelationshipSuggester}
+              />
+            </Suspense>
           </div>
         )}
 
         {activeView === "linking" && (
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
-            <InternalLinkingView
-              definitions={definitions}
-              onSelectEntity={(entity) => setSelectedEntityForDetail(entity)}
-              onOpenSingleModalWithTerm={(term, category) => {
-                if (!checkSubscription("Criar Entidade a partir de Menção")) return;
-                setEditingEntity({
-                  id: `ent-${Date.now()}`,
-                  entity: term,
-                  category: category || "Geral",
-                  definition: "",
-                  shortSummary: "",
-                  sources: [],
-                  sourcesString: "",
-                  lsiKeywords: [],
-                  schemaType: "DefinedTerm",
-                  status: "idle",
-                  createdAt: new Date().toISOString(),
-                });
-                setIsSingleModalOpen(true);
-              }}
-            />
+            <Suspense fallback={
+              <div className="p-16 text-center text-slate-500 text-xs flex flex-col items-center justify-center gap-2">
+                <div className="w-5 h-5 border-2 border-emerald-600 border-t-transparent rounded-full animate-spin" />
+                <span>Carregando Arquitetura de Links Internos...</span>
+              </div>
+            }>
+              <InternalLinkingView
+                definitions={definitions}
+                onSelectEntity={(entity) => setSelectedEntityForDetail(entity)}
+                onOpenSingleModalWithTerm={(term, category) => {
+                  if (!checkSubscription("Criar Entidade a partir de Menção")) return;
+                  setEditingEntity({
+                    id: `ent-${Date.now()}`,
+                    entity: term,
+                    category: category || "Geral",
+                    definition: "",
+                    shortSummary: "",
+                    sources: [],
+                    sourcesString: "",
+                    lsiKeywords: [],
+                    schemaType: "DefinedTerm",
+                    status: "idle",
+                    createdAt: new Date().toISOString(),
+                  });
+                  setIsSingleModalOpen(true);
+                }}
+              />
+            </Suspense>
           </div>
         )}
 
         {activeView === "analysis" && (
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
-            <IdeasAndPossibilitiesView />
+            <Suspense fallback={
+              <div className="p-16 text-center text-slate-500 text-xs flex flex-col items-center justify-center gap-2">
+                <div className="w-5 h-5 border-2 border-emerald-600 border-t-transparent rounded-full animate-spin" />
+                <span>Carregando Ideias e Possibilidades...</span>
+              </div>
+            }>
+              <IdeasAndPossibilitiesView />
+            </Suspense>
           </div>
         )}
 
@@ -663,144 +792,163 @@ export default function App() {
         </div>
       )}
 
-      {/* Modals */}
-      <SingleGeneratorModal
-        isOpen={isSingleModalOpen}
-        onClose={() => {
-          setIsSingleModalOpen(false);
-          setEditingEntity(null);
-        }}
-        onSave={handleSaveSingleEntity}
-        editingEntity={editingEntity}
-        settings={settings}
-        presets={presets}
-      />
+      {/* On-demand Modals with React Suspense code-splitting */}
+      <Suspense fallback={null}>
+        {isSingleModalOpen && (
+          <SingleGeneratorModal
+            isOpen={isSingleModalOpen}
+            onClose={() => {
+              setIsSingleModalOpen(false);
+              setEditingEntity(null);
+            }}
+            onSave={handleSaveSingleEntity}
+            editingEntity={editingEntity}
+            settings={settings}
+            presets={presets}
+          />
+        )}
 
-      <BatchGeneratorModal
-        isOpen={isBatchModalOpen}
-        onClose={() => setIsBatchModalOpen(false)}
-        onAddBatch={handleAddBatch}
-        settings={settings}
-        presets={presets}
-      />
+        {isBatchModalOpen && (
+          <BatchGeneratorModal
+            isOpen={isBatchModalOpen}
+            onClose={() => setIsBatchModalOpen(false)}
+            onAddBatch={handleAddBatch}
+            settings={settings}
+            presets={presets}
+          />
+        )}
 
-      <EntityDetailModal
-        entity={selectedEntityForDetail}
-        isOpen={!!selectedEntityForDetail}
-        onClose={() => setSelectedEntityForDetail(null)}
-        onEdit={handleEditEntity}
-        onRegenerate={handleRegenerateEntityWithAuth}
-        onOpenWikidataReconcile={(ent) => {
-          if (!checkSubscription("Reconciliação Wikidata")) return;
-          setSelectedEntityForDetail(ent);
-          setIsWikidataModalOpen(true);
-        }}
-        onUpdateEntity={handleUpdateEntityWithAuth}
-        onClearReconciliation={handleClearWikidataWithAuth}
-      />
+        {selectedEntityForDetail && (
+          <EntityDetailModal
+            entity={selectedEntityForDetail}
+            isOpen={!!selectedEntityForDetail}
+            onClose={() => setSelectedEntityForDetail(null)}
+            onEdit={handleEditEntity}
+            onRegenerate={handleRegenerateEntityWithAuth}
+            onOpenWikidataReconcile={(ent) => {
+              if (!checkSubscription("Reconciliação Wikidata")) return;
+              setSelectedEntityForDetail(ent);
+              setIsWikidataModalOpen(true);
+            }}
+            onUpdateEntity={handleUpdateEntityWithAuth}
+            onClearReconciliation={handleClearWikidataWithAuth}
+          />
+        )}
 
-      <PromptManagerModal
-        isOpen={isPromptModalOpen}
-        onClose={() => setIsPromptModalOpen(false)}
-        settings={settings}
-        onSaveSettings={(newSettings) => {
-          setSettings(newSettings);
-          showToast("Configurações de prompt e modelo atualizadas!");
-        }}
-        presets={presets}
-      />
+        {isPromptModalOpen && (
+          <PromptManagerModal
+            isOpen={isPromptModalOpen}
+            onClose={() => setIsPromptModalOpen(false)}
+            settings={settings}
+            onSaveSettings={(newSettings) => {
+              setSettings(newSettings);
+              showToast("Configurações de prompt e modelo atualizadas!");
+            }}
+            presets={presets}
+          />
+        )}
 
-      <ExportModal
-        isOpen={isExportModalOpen}
-        onClose={() => setIsExportModalOpen(false)}
-        definitions={definitions}
-      />
+        {isExportModalOpen && (
+          <ExportModal
+            isOpen={isExportModalOpen}
+            onClose={() => setIsExportModalOpen(false)}
+            definitions={definitions}
+          />
+        )}
 
-      <RelationshipSuggesterModal
-        isOpen={isSuggesterModalOpen}
-        onClose={() => setIsSuggesterModalOpen(false)}
-        definitions={definitions}
-        selectedModel={settings.model}
-        onApplyRelationship={(sourceId, triplet) => {
-          if (!checkSubscription("Conectar Entidades")) return;
-          handleApplyRelationship(sourceId, triplet);
-        }}
-        onBulkApplyRelationships={(rels) => {
-          if (!checkSubscription("Conectar Entidades em Massa")) return;
-          handleBulkApplyRelationships(rels);
-        }}
-      />
+        {isSuggesterModalOpen && (
+          <RelationshipSuggesterModal
+            isOpen={isSuggesterModalOpen}
+            onClose={() => setIsSuggesterModalOpen(false)}
+            definitions={definitions}
+            selectedModel={settings.model}
+            onApplyRelationship={(sourceId, triplet) => {
+              if (!checkSubscription("Conectar Entidades")) return;
+              handleApplyRelationship(sourceId, triplet);
+            }}
+            onBulkApplyRelationships={(rels) => {
+              if (!checkSubscription("Conectar Entidades em Massa")) return;
+              handleBulkApplyRelationships(rels);
+            }}
+          />
+        )}
 
-      <WikidataReconcileModal
-        isOpen={isWikidataModalOpen}
-        onClose={() => setIsWikidataModalOpen(false)}
-        entity={selectedEntityForDetail || (definitions.length > 0 ? definitions[0] : null)}
-        allEntities={definitions}
-        onApplyReconciliation={(entityId, match) => {
-          if (!checkSubscription("Reconciliação Wikidata")) return;
-          handleApplyWikidataReconciliation(entityId, match);
-        }}
-        onBulkApplyReconciliation={(matches) => {
-          if (!checkSubscription("Reconciliação em Lote")) return;
-          handleBulkApplyWikidata(matches);
-        }}
-      />
+        {isWikidataModalOpen && (
+          <WikidataReconcileModal
+            isOpen={isWikidataModalOpen}
+            onClose={() => setIsWikidataModalOpen(false)}
+            entity={selectedEntityForDetail || (definitions.length > 0 ? definitions[0] : null)}
+            allEntities={definitions}
+            onApplyReconciliation={(entityId, match) => {
+              if (!checkSubscription("Reconciliação Wikidata")) return;
+              handleApplyWikidataReconciliation(entityId, match);
+            }}
+            onBulkApplyReconciliation={(matches) => {
+              if (!checkSubscription("Reconciliação em Lote")) return;
+              handleBulkApplyWikidata(matches);
+            }}
+          />
+        )}
 
-      <TopicalAuditModal
-        isOpen={isTopicalAuditModalOpen}
-        onClose={() => setIsTopicalAuditModalOpen(false)}
-        definitions={definitions}
-        selectedModel={settings.model}
-        onAddEntity={(newEntity) => {
-          if (!checkSubscription("Adicionar Entidade")) return;
-          handleSaveSingleEntity(newEntity);
-          showToast(`Entidade "${newEntity.entity}" incorporada ao glossário.`);
-        }}
-        onAddTriplet={(sourceId, triplet) => {
-          if (!checkSubscription("Conectar Aresta Ontológica")) return;
-          handleApplyRelationship(sourceId, triplet);
-          showToast(`Aresta ontológica [${triplet.predicate}] adicionada ao grafo.`);
-        }}
-        onOpenBatchWithTerms={() => {
-          setIsTopicalAuditModalOpen(false);
-          setIsBatchModalOpen(true);
-        }}
-      />
+        {isTopicalAuditModalOpen && (
+          <TopicalAuditModal
+            isOpen={isTopicalAuditModalOpen}
+            onClose={() => setIsTopicalAuditModalOpen(false)}
+            definitions={definitions}
+            selectedModel={settings.model}
+            onAddEntity={(newEntity) => {
+              if (!checkSubscription("Adicionar Entidade")) return;
+              handleSaveSingleEntity(newEntity);
+              showToast(`Entidade "${newEntity.entity}" incorporada ao glossário.`);
+            }}
+            onAddTriplet={(sourceId, triplet) => {
+              if (!checkSubscription("Conectar Aresta Ontológica")) return;
+              handleApplyRelationship(sourceId, triplet);
+              showToast(`Aresta ontológica [${triplet.predicate}] adicionada ao grafo.`);
+            }}
+            onOpenBatchWithTerms={() => {
+              setIsTopicalAuditModalOpen(false);
+              setIsBatchModalOpen(true);
+            }}
+          />
+        )}
 
-      {/* Auth Modal (Login / Register / 1-Click Google) */}
-      <AuthModal
-        isOpen={isAuthModalOpen}
-        onClose={() => setIsAuthModalOpen(false)}
-        initialMode={authModalMode}
-        onSuccess={(profile) => {
-          setUserProfile(profile);
-          showToast(`Bem-vindo, ${profile.displayName || profile.email}!`);
-          if (profile.status === "active" || profile.role === "admin") {
-            setIsPaywallOpen(false);
-          }
-        }}
-      />
+        {isAuthModalOpen && (
+          <AuthModal
+            isOpen={isAuthModalOpen}
+            onClose={() => setIsAuthModalOpen(false)}
+            initialMode={authModalMode}
+            onSuccess={(profile) => {
+              setUserProfile(profile);
+              showToast(`Bem-vindo, ${profile.displayName || profile.email}!`);
+              if (profile.status === "active" || profile.role === "admin") {
+                setIsPaywallOpen(false);
+              }
+            }}
+          />
+        )}
 
-      {/* Subscription Paywall & Graceful Blocking Modal */}
-      <SubscriptionPaywallModal
-        isOpen={isPaywallOpen}
-        onClose={() => setIsPaywallOpen(false)}
-        user={userProfile}
-        actionAttempted={paywallAction}
-        onOpenAuth={(mode) => {
-          setAuthModalMode(mode || "login");
-          setIsAuthModalOpen(true);
-        }}
-      />
+        {isPaywallOpen && (
+          <SubscriptionPaywallModal
+            isOpen={isPaywallOpen}
+            onClose={() => setIsPaywallOpen(false)}
+            user={userProfile}
+            actionAttempted={paywallAction}
+            onOpenAuth={(mode) => {
+              setAuthModalMode(mode || "login");
+              setIsAuthModalOpen(true);
+            }}
+          />
+        )}
 
-      {/* Admin Subscriptions & Access Management Panel (Super Admin only) */}
-      {userProfile && userProfile.role === "admin" && (
-        <AdminSubscriptionsModal
-          isOpen={isAdminPanelOpen}
-          onClose={() => setIsAdminPanelOpen(false)}
-          currentUser={userProfile}
-        />
-      )}
+        {userProfile && userProfile.role === "admin" && isAdminPanelOpen && (
+          <AdminSubscriptionsModal
+            isOpen={isAdminPanelOpen}
+            onClose={() => setIsAdminPanelOpen(false)}
+            currentUser={userProfile}
+          />
+        )}
+      </Suspense>
 
     </div>
   );

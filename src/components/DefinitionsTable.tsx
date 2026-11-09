@@ -119,10 +119,10 @@ export const DefinitionsTable: React.FC<DefinitionsTableProps> = ({
         <div>
           <div className="inline-flex items-center gap-2 text-[11px] font-bold uppercase tracking-widest text-[#1a5d38] mb-1">
             <span className="w-2 h-2 rounded-full bg-[#1a5d38] animate-pulse" />
-            <span>Graph Studio · Base Ontológica</span>
+            <span>Gerador de Entidades · Base Ontológica</span>
           </div>
           <h1 className="font-serif text-3xl sm:text-4xl text-[#0a0f1d] font-normal tracking-tight">
-            Glossário de Entidades Semânticas
+            Gerador de Glossário de Entidades
           </h1>
           <p className="text-slate-600 text-xs sm:text-sm mt-1">
             Definições estruturadas para autoridade tópica, Schema.org, SameAs (Wikidata) e GraphRAG.

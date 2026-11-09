@@ -110,6 +110,16 @@ export interface MissingEdgeGap {
   schemaProperty?: string;
 }
 
+export interface QualityMetrics {
+  total_tokens: number;
+  entity_token_count: number;
+  buzzword_count: number;
+  entity_density: number;
+  vagueness_penalty: number;
+  quality_multiplier: number;
+  isPythonEngineLive?: boolean;
+}
+
 export interface TopicalAuditReport {
   analyzedTopic: string;
   topicalAuthorityScore: number; // 0 to 100
@@ -121,6 +131,7 @@ export interface TopicalAuditReport {
   orphanedEntities: string[];
   strategicRecommendations: string[];
   pillarEntities: string[];
+  qualityMetrics?: QualityMetrics;
   modelUsed?: string;
   isLocalFallback?: boolean;
 }

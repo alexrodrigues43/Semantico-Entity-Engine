@@ -12,7 +12,7 @@ import {
   Eye,
   EyeOff
 } from "lucide-react";
-import { loginWithGoogle, loginWithEmail, registerWithEmail } from "../lib/firebase";
+import { loginWithGoogle, loginWithGoogleRedirect, loginWithEmail, registerWithEmail } from "../lib/firebase";
 import { SemanticoLogo } from "./SemanticoLogo";
 import { UserProfile } from "../types";
 
@@ -37,12 +37,14 @@ export const AuthModal: React.FC<AuthModalProps> = ({
   const [isLoading, setIsLoading] = useState(false);
   const [isGoogleLoading, setIsGoogleLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [showRedirectFallback, setShowRedirectFallback] = useState(false);
 
   if (!isOpen) return null;
 
   const handleGoogleLogin = async () => {
     setIsGoogleLoading(true);
     setErrorMessage(null);
+    setShowRedirectFallback(false);
     try {
       const profile = await loginWithGoogle();
       onSuccess(profile);
@@ -50,11 +52,16 @@ export const AuthModal: React.FC<AuthModalProps> = ({
     } catch (err: any) {
       console.error("Google Auth error:", err);
       if (err.code === "auth/popup-closed-by-user") {
-        setErrorMessage("A janela de autenticação do Google foi fechada.");
+        setErrorMessage("A janela de autenticação foi fechada antes de concluir o login.");
+        setShowRedirectFallback(true);
+      } else if (err.code === "auth/popup-blocked") {
+        setErrorMessage("O pop-up de login foi bloqueado pelo seu navegador.");
+        setShowRedirectFallback(true);
       } else if (err.code === "auth/cancelled-popup-request") {
         setErrorMessage("Requisição cancelada.");
       } else {
         setErrorMessage(err.message || "Erro ao conectar via Google. Tente novamente.");
+        setShowRedirectFallback(true);
       }
     } finally {
       setIsGoogleLoading(false);
@@ -164,9 +171,21 @@ export const AuthModal: React.FC<AuthModalProps> = ({
         <div className="p-6 pt-4 space-y-4">
           {/* Error Banner */}
           {errorMessage && (
-            <div className="p-3 bg-red-950/70 border border-red-800/80 rounded-xl flex items-start gap-2.5 text-xs text-red-200 animate-in fade-in">
-              <AlertCircle className="w-4 h-4 text-red-400 shrink-0 mt-0.5" />
-              <span>{errorMessage}</span>
+            <div className="p-3 bg-red-950/70 border border-red-800/80 rounded-xl space-y-2 text-xs text-red-200 animate-in fade-in">
+              <div className="flex items-start gap-2.5">
+                <AlertCircle className="w-4 h-4 text-red-400 shrink-0 mt-0.5" />
+                <span className="leading-relaxed">{errorMessage}</span>
+              </div>
+              {showRedirectFallback && (
+                <button
+                  type="button"
+                  onClick={() => loginWithGoogleRedirect()}
+                  className="w-full mt-1.5 py-1.5 px-3 bg-white/10 hover:bg-white/20 border border-white/20 rounded-lg text-white font-semibold text-[11px] transition-colors flex items-center justify-center gap-1.5 cursor-pointer active:scale-98"
+                >
+                  <span>Entrar por Redirecionamento (Sem Pop-up)</span>
+                  <ArrowRight className="w-3 h-3 text-[#fdd910]" />
+                </button>
+              )}
             </div>
           )}
 
