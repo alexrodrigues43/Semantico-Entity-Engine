@@ -13,6 +13,7 @@ import {
   Code
 } from "lucide-react";
 import { SeoEntityDefinition, GenerationSettings, PromptPreset } from "../types";
+import { SupportedLang, getTranslations } from "../lib/i18n";
 
 interface SingleGeneratorModalProps {
   isOpen: boolean;
@@ -21,6 +22,7 @@ interface SingleGeneratorModalProps {
   editingEntity?: SeoEntityDefinition | null;
   settings: GenerationSettings;
   presets: PromptPreset[];
+  uiLang?: SupportedLang;
 }
 
 export const SingleGeneratorModal: React.FC<SingleGeneratorModalProps> = ({
@@ -30,7 +32,15 @@ export const SingleGeneratorModal: React.FC<SingleGeneratorModalProps> = ({
   editingEntity,
   settings,
   presets,
+  uiLang = "pt",
 }) => {
+  const t = getTranslations(uiLang);
+  const [contentLang, setContentLang] = useState<SupportedLang>(() => {
+    const s = settings.language?.toLowerCase() || "";
+    if (s.startsWith("en")) return "en";
+    if (s.startsWith("es")) return "es";
+    return uiLang || "pt";
+  });
   const [entity, setEntity] = useState("");
   const [category, setCategory] = useState("");
   const [context, setContext] = useState("");
@@ -84,7 +94,7 @@ export const SingleGeneratorModal: React.FC<SingleGeneratorModalProps> = ({
           model: settings.model,
           tone: tone,
           length: length,
-          language: settings.language,
+          language: contentLang,
           enableGrounding: settings.enableGrounding,
         }),
       });
@@ -159,10 +169,10 @@ export const SingleGeneratorModal: React.FC<SingleGeneratorModalProps> = ({
             </div>
             <div>
               <h2 className="text-base font-bold text-slate-900">
-                {editingEntity ? "Editar Entidade Semântica" : "Gerar Nova Definição Semântica"}
+                {editingEntity ? t.singleModal.titleEdit : t.singleModal.titleNew}
               </h2>
               <p className="text-xs text-slate-500">
-                Crie definições otimizadas para SEO com IA ontológica e fontes de autoridade
+                {t.singleModal.subtitle}
               </p>
             </div>
           </div>
@@ -186,7 +196,7 @@ export const SingleGeneratorModal: React.FC<SingleGeneratorModalProps> = ({
           {/* Preset Selector */}
           <div>
             <label className="block text-xs font-semibold text-slate-700 mb-1.5">
-              Preset de Otimização Semântica
+              {t.singleModal.presetLabel}
             </label>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
               {presets.map((preset) => (
@@ -214,31 +224,66 @@ export const SingleGeneratorModal: React.FC<SingleGeneratorModalProps> = ({
             </div>
           </div>
 
+          {/* Project / Content Language Selector (Multilingual Target) */}
+          <div className="space-y-1.5 p-3 rounded-xl bg-slate-50 border border-slate-200/80">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1">
+              <label className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
+                <Globe className="w-3.5 h-3.5 text-emerald-600" aria-hidden="true" />
+                <span>{t.projectLanguage.label}</span>
+              </label>
+              <span className="text-[11px] text-slate-500">
+                {t.projectLanguage.hint}
+              </span>
+            </div>
+            <div className="grid grid-cols-3 gap-2 pt-1">
+              {[
+                { id: "pt" as const, label: t.projectLanguage.pt, flag: "🇧🇷" },
+                { id: "en" as const, label: t.projectLanguage.en, flag: "🇺🇸" },
+                { id: "es" as const, label: t.projectLanguage.es, flag: "🇪🇸" },
+              ].map((item) => (
+                <button
+                  key={item.id}
+                  type="button"
+                  onClick={() => setContentLang(item.id)}
+                  className={`min-h-[44px] px-3 py-2 rounded-xl text-xs font-bold flex items-center justify-center gap-2 transition-all cursor-pointer border ${
+                    contentLang === item.id
+                      ? "bg-emerald-50 border-emerald-500 text-emerald-800 shadow-2xs ring-1 ring-emerald-500/30"
+                      : "bg-white border-slate-200 text-slate-600 hover:text-slate-900 hover:bg-slate-100"
+                  }`}
+                  aria-pressed={contentLang === item.id}
+                >
+                  <span aria-hidden="true" className="text-sm">{item.flag}</span>
+                  <span>{item.label}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+
           {/* Form Inputs Grid */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
               <label className="block text-xs font-semibold text-slate-700 mb-1">
-                Entidade / Termo <span className="text-rose-500">*</span>
+                {t.modals.entityLabel} <span className="text-rose-500">*</span>
               </label>
               <input
                 type="text"
-                placeholder="Ex: Linked Data, Topic Clusters, Schema Markup"
+                placeholder={t.modals.entityPlaceholder}
                 value={entity}
                 onChange={(e) => setEntity(e.target.value)}
-                className="w-full px-3.5 py-2 text-sm bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 text-slate-900 font-medium"
+                className="w-full px-3.5 py-2 text-base sm:text-sm bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 text-slate-900 font-medium"
               />
             </div>
 
             <div>
               <label className="block text-xs font-semibold text-slate-700 mb-1">
-                Categoria Temática (Opcional)
+                {t.modals.categoryLabel}
               </label>
               <input
                 type="text"
-                placeholder="Ex: Tecnologia da Web, Marketing Digital (ou deixe para IA detectar)"
+                placeholder={t.modals.categoryPlaceholder}
                 value={category}
                 onChange={(e) => setCategory(e.target.value)}
-                className="w-full px-3.5 py-2 text-sm bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 text-slate-900"
+                className="w-full px-3.5 py-2 text-base sm:text-sm bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 text-slate-900"
               />
             </div>
           </div>
@@ -247,26 +292,26 @@ export const SingleGeneratorModal: React.FC<SingleGeneratorModalProps> = ({
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
               <label className="block text-xs font-semibold text-slate-700 mb-1">
-                Extensão & Profundidade
+                {t.singleModal.lengthLabel}
               </label>
               <select
                 value={length}
                 onChange={(e) => setLength(e.target.value as any)}
                 className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 text-slate-800"
               >
-                <option value="concise">Concisa (1-2 parágrafos - Snippets rápidos)</option>
-                <option value="standard">Padrão Ontológica (2-4 parágrafos - Recomendado)</option>
-                <option value="detailed">Aprofundada (3-5 parágrafos - Alta Autoridade E-E-A-T)</option>
+                <option value="concise">{t.singleModal.lengthConcise}</option>
+                <option value="standard">{t.singleModal.lengthStandard}</option>
+                <option value="detailed">{t.singleModal.lengthDetailed}</option>
               </select>
             </div>
 
             <div>
               <label className="block text-xs font-semibold text-slate-700 mb-1">
-                Contexto do Nicho / Projeto
+                {t.singleModal.contextLabel}
               </label>
               <input
                 type="text"
-                placeholder="Ex: Foco em e-commerce, saúde, SaaS B2B..."
+                placeholder={t.singleModal.contextPlaceholder}
                 value={context}
                 onChange={(e) => setContext(e.target.value)}
                 className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 text-slate-900"
@@ -286,12 +331,12 @@ export const SingleGeneratorModal: React.FC<SingleGeneratorModalProps> = ({
               {isGenerating ? (
                 <>
                   <RefreshCw className="w-4 h-4 animate-spin" />
-                  <span>Gerando Definição Semântica com Gemini...</span>
+                  <span>{t.singleModal.btnGenerating}</span>
                 </>
               ) : (
                 <>
                   <Sparkles className="w-4 h-4" />
-                  <span>{definition ? "Regenerar Definição com IA" : "Gerar Definição com IA"}</span>
+                  <span>{definition ? t.singleModal.btnRegenerate : t.singleModal.btnGenerate}</span>
                 </>
               )}
             </button>
@@ -302,11 +347,11 @@ export const SingleGeneratorModal: React.FC<SingleGeneratorModalProps> = ({
             <div>
               <div className="flex items-center justify-between mb-1">
                 <label className="text-xs font-semibold text-slate-700">
-                  Definição Semântica Gerada
+                  {t.singleModal.generatedTitle}
                 </label>
                 {definition && (
                   <span className="text-[11px] text-slate-400 font-mono">
-                    {definition.split(/\s+/).filter(Boolean).length} palavras | {definition.length} caracteres
+                    {definition.split(/\s+/).filter(Boolean).length} {t.table.words} | {definition.length} chars
                   </span>
                 )}
               </div>
@@ -314,18 +359,18 @@ export const SingleGeneratorModal: React.FC<SingleGeneratorModalProps> = ({
                 rows={6}
                 value={definition}
                 onChange={(e) => setDefinition(e.target.value)}
-                placeholder="O texto gerado da definição semântica aparecerá aqui e pode ser editado livremente..."
+                placeholder={t.singleModal.generatedPlaceholder}
                 className="w-full p-3 text-xs sm:text-sm bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 text-slate-900 leading-relaxed font-sans"
               />
             </div>
 
             <div>
               <label className="block text-xs font-semibold text-slate-700 mb-1">
-                Fontes de Autoridade / URLs (separadas por vírgula)
+                {t.singleModal.sourcesLabel}
               </label>
               <input
                 type="text"
-                placeholder="Ex: https://rockcontent.com/br/..., https://www.w3.org/..."
+                placeholder={t.singleModal.sourcesPlaceholder}
                 value={sourcesString}
                 onChange={(e) => setSourcesString(e.target.value)}
                 className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 text-slate-900 font-mono"
@@ -340,9 +385,9 @@ export const SingleGeneratorModal: React.FC<SingleGeneratorModalProps> = ({
           <button
             type="button"
             onClick={onClose}
-            className="px-4 py-2 text-xs font-semibold text-slate-600 hover:text-slate-800 hover:bg-slate-100 rounded-lg transition-colors"
+            className="px-4 py-2 text-xs font-semibold text-slate-600 hover:text-slate-800 hover:bg-slate-100 rounded-lg transition-colors cursor-pointer"
           >
-            Cancelar
+            {t.singleModal.btnCancel}
           </button>
 
           <button
@@ -353,7 +398,7 @@ export const SingleGeneratorModal: React.FC<SingleGeneratorModalProps> = ({
             className="px-5 py-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white text-xs font-semibold rounded-lg shadow-xs flex items-center gap-1.5 transition-colors cursor-pointer"
           >
             <Check className="w-3.5 h-3.5" />
-            <span>Salvar Entidade</span>
+            <span>{t.singleModal.btnSave}</span>
           </button>
         </div>
 

@@ -1,5 +1,6 @@
 import express from "express";
 import path from "path";
+import crypto from "crypto";
 import { createServer as createViteServer } from "vite";
 import { GoogleGenAI, Type } from "@google/genai";
 import dotenv from "dotenv";
@@ -266,11 +267,33 @@ async function callGeminiWithCascade(
   throw lastError;
 }
 
+// In-memory cache for generated entities (isolated by language, entity, model, and tone)
+const aiGenerationCache = new Map<string, { data: any; timestamp: number }>();
+const CACHE_TTL_MS = 24 * 60 * 60 * 1000; // 24 hours
+
+// Helper for strict multilingual instructions and semantic SEO vocabulary
+function getLangPromptInstructions(language: string = "pt-BR"): string {
+  const norm = (language || "").toLowerCase();
+  if (norm.startsWith("en")) {
+    return `MANDATORY RESPONSE LANGUAGE: English (en-US).
+All textual fields (definition, category, shortSummary, reasoning, labels) MUST be written in fluent English.
+SEMANTIC VOCABULARY STRICT RULE: NEVER use the word "keyword" or "keywords". Use exclusively "term", "concept", or "entity".`;
+  }
+  if (norm.startsWith("es")) {
+    return `IDIOMA DE RESPUESTA OBLIGATORIO: Español (es).
+Todos los campos textuales (definition, category, shortSummary, reasoning, etiquetas) DEBEN estar redactados en español fluido.
+REGLA ESTRICTA DE VOCABULARIO SEMÁNTICO: NUNCA use la expresión "palabra clave" o "palabras clave". Use exclusivamente "término", "concepto" o "entidad".`;
+  }
+  return `IDIOMA DE RESPOSTA OBRIGATÓRIO: Português do Brasil (pt-BR).
+Todos os campos textuais (definição, categoria, sumário, justificativas) DEVEM ser redigidos em português claro e fluente.
+REGRA ESTRITA DE VOCABULÁRIO SEMÂNTICO: NUNCA use a expressão "palavra-chave" ou "palavras-chave". Use exclusivamente "termo", "conceito" ou "entidade".`;
+}
+
 // Rule-based NLP Entity Extractor Fallback (Executes locally if API hits quota)
 function extractEntitiesLocally(text: string, maxEntities: number = 15) {
   const cleanText = text.replace(/<[^>]*>/g, " ");
 
-  // Stopwords in Portuguese & English to ignore
+  // Stopwords in Portuguese, Spanish & English to ignore
   const stopwords = new Set([
     "o", "a", "os", "as", "um", "uma", "uns", "umas", "de", "da", "do", "das", "dos",
     "em", "na", "no", "nas", "nos", "por", "para", "com", "sem", "sob", "sobre",
@@ -280,7 +303,10 @@ function extractEntitiesLocally(text: string, maxEntities: number = 15) {
     "eles", "elas", "nós", "você", "vocês", "diferente", "outro", "outra", "outros", "outras",
     "além", "também", "apenas", "muito", "pouco", "mais", "menos", "grande", "pequeno",
     "no", "na", "centro", "dessa", "desse", "disso", "deste", "desta", "para", "pela", "pelo",
-    "the", "a", "an", "and", "or", "but", "in", "on", "at", "to", "for", "with", "by", "of"
+    "the", "a", "an", "and", "or", "but", "in", "on", "at", "to", "for", "with", "by", "of",
+    "el", "la", "los", "las", "un", "una", "unos", "unas", "del", "al", "pero", "este", "esta",
+    "estos", "estas", "ese", "esa", "esos", "esas", "aquel", "aquella", "aquellos", "aquellas",
+    "su", "sus", "mi", "mis", "él", "ella", "ellos", "ellas", "nosotros", "usted", "ustedes"
   ]);
 
   const candidatesMap = new Map<string, { count: number; category: string; relevance: string }>();
@@ -499,6 +525,20 @@ app.post("/api/seo-definitions/generate", async (req, res) => {
       return res.status(400).json({ error: "O campo 'entity' (entidade) é obrigatório." });
     }
 
+    // SHA-256 in-memory cache check isolated by language
+    const cacheKey = crypto
+      .createHash("sha256")
+      .update(`${language}:${entity.toLowerCase().trim()}:${(category || "").toLowerCase().trim()}:${model}:${length}:${tone}`)
+      .digest("hex");
+
+    if (aiGenerationCache.has(cacheKey)) {
+      const cached = aiGenerationCache.get(cacheKey)!;
+      if (Date.now() - cached.timestamp < CACHE_TTL_MS) {
+        return res.json({ ...cached.data, cached: true });
+      }
+      aiGenerationCache.delete(cacheKey);
+    }
+
     const ai = getGeminiClient();
 
     const lengthGuide =
@@ -510,6 +550,8 @@ app.post("/api/seo-definitions/generate", async (req, res) => {
 
     const defaultSystemPrompt = `Você é o maior especialista mundial em SEO Semântico, Ontologias, Web Semântica, Knowledge Graphs e Arquitetura de Informação para Mecanismos de Busca (Google Search).
 Seu objetivo é gerar uma definição semântica definitiva e otimizada de alta autoridade (E-E-A-T) para a entidade fornecida.
+
+${getLangPromptInstructions(language)}
 
 Diretrizes obrigatórias para a Definição:
 1. Inicie com a fórmula clássica ontológica de definição semântica clara e direta: [Entidade] é [classe/categoria superior] que [característica diferenciadora / propósito essencial].
@@ -677,7 +719,7 @@ Retorne os seguintes dados estruturados:
     const salienceScore = typeof req.body.salienceScore === "number" ? req.body.salienceScore : 88;
     const salienceLevel = req.body.salienceLevel || (salienceScore >= 65 ? "central" : salienceScore >= 40 ? "supporting" : "peripheral");
 
-    res.json({
+    const resultPayload = {
       entity,
       category: parsedData.category || category || "Geral",
       definition: parsedData.definition,
@@ -697,7 +739,12 @@ Retorne os seguintes dados estruturados:
       salienceLevel,
       modelUsed: modelUsed,
       createdAt: new Date().toISOString(),
-    });
+    };
+
+    // Store in cache
+    aiGenerationCache.set(cacheKey, { data: resultPayload, timestamp: Date.now() });
+
+    res.json(resultPayload);
   } catch (error: any) {
     console.error("Erro na rota /api/seo-definitions/generate:", error);
     const is429 = error?.status === 429 || error?.message?.includes("429") || error?.message?.includes("RESOURCE_EXHAUSTED");
@@ -713,7 +760,7 @@ Retorne os seguintes dados estruturados:
 // Entity Extractor from Article/Text Endpoint with Multi-Model Fallback + Salience Scoring + Local NLP Guarantee
 app.post("/api/seo-definitions/extract-entities", async (req, res) => {
   try {
-    const { text, maxEntities = 15, model = "gemini-3.7-flash" } = req.body;
+    const { text, maxEntities = 15, model = "gemini-3.7-flash", language = "pt-BR" } = req.body;
     if (!text || typeof text !== "string" || !text.trim()) {
       return res.status(400).json({ error: "O texto para extração é obrigatório." });
     }
@@ -723,6 +770,8 @@ app.post("/api/seo-definitions/extract-entities", async (req, res) => {
     try {
       const ai = getGeminiClient();
       const prompt = `Você é um especialista de elite em Processamento de Linguagem Natural (NLP), Named Entity Recognition (NER), Algoritmos de Salência (estilo Google Cloud Natural Language API) e SEO Semântico.
+
+${getLangPromptInstructions(language)}
 
 Analise minuciosamente o seguinte texto e extraia entre 5 e ${Math.max(5, maxEntities)} entidades essenciais, conceitos ontológicos e tópicos fundamentais presentes no texto.
 
@@ -873,7 +922,7 @@ ${text.slice(0, 60000)}
 // FEATURE 2: JOINT NER + RELATION EXTRACTION (Simultaneous entities + triplets in 1 pass)
 app.post("/api/seo-definitions/joint-extraction", async (req, res) => {
   try {
-    const { text, maxEntities = 15, model = "gemini-3.7-flash" } = req.body;
+    const { text, maxEntities = 15, model = "gemini-3.7-flash", language = "pt-BR" } = req.body;
     if (!text || typeof text !== "string" || !text.trim()) {
       return res.status(400).json({ error: "O texto para extração conjunta é obrigatório." });
     }
@@ -885,6 +934,8 @@ app.post("/api/seo-definitions/joint-extraction", async (req, res) => {
       const prompt = `Você é um Engenheiro Chefe de Processamento de Linguagem Natural e Web Semântica.
 Execute uma EXTRAÇÃO CONJUNTA (Joint Named Entity Recognition & Relation Extraction) no texto fornecido.
 Em uma ÚNICA passagem, você deve extrair tanto as Entidades canônicas (com pontuação de Salência) quanto as Relações Semânticas (RDF Triplets: Sujeito -[Predicado]-> Objeto) que conectam essas entidades diretamente no conteúdo.
+
+${getLangPromptInstructions(language)}
 
 DIRETRIZES DE RIGOR SEMÂNTICO (POOLPARTY & KNOWLEDGE GRAPH):
 1. ENTIDADES & DESAMBIGUAÇÃO:
@@ -1049,6 +1100,7 @@ app.post("/api/seo-definitions/audit-topical-gaps", async (req, res) => {
       existingEntities = [],
       topic = "",
       model = "gemini-3.7-flash",
+      language = "pt-BR",
     } = req.body;
 
     const topicSubject = topic || (existingEntities[0]?.entity ? `Domínio de ${existingEntities[0].entity}` : "SEO Semântico e Knowledge Graphs");
@@ -1059,6 +1111,8 @@ app.post("/api/seo-definitions/audit-topical-gaps", async (req, res) => {
       const ai = getGeminiClient();
       const prompt = `Você é o Arquiteto de Autoridade Tópica (Topical Authority) e Engenheiro de Ontologias Semânticas.
 Sua tarefa é realizar uma AUDITORIA COMPLETA DE LACUNAS TÓPICAS (Topical Gap Analysis) e ARESTAS FALTANTES (Missing Graph Edges).
+
+${getLangPromptInstructions(language)}
 
 Contexto a Auditar:
 - Tópico/Nicho Central: "${topicSubject}"
@@ -1310,6 +1364,7 @@ app.post("/api/seo-definitions/suggest-relationships", async (req, res) => {
       focusCategory = "all",
       model = "gemini-3.7-flash",
       maxSuggestions = 12,
+      language = "pt-BR",
     } = req.body;
 
     if (!Array.isArray(entities) || entities.length < 2) {
@@ -1334,6 +1389,8 @@ app.post("/api/seo-definitions/suggest-relationships", async (req, res) => {
       }));
 
       const prompt = `Você é o Arquiteto Chefe de Ontologias Semânticas e Knowledge Graphs para Motores de Busca e Modelos de Linguagem (Google Knowledge Graph, Wikidata, Schema.org).
+
+${getLangPromptInstructions(language)}
 
 Analise o seguinte catálogo com ${entities.length} entidades cadastradas no glossário:
 ${JSON.stringify(entitySummaries, null, 2)}
@@ -1480,31 +1537,28 @@ Sua missão:
 // ==========================================
 // FEATURE 1: WIKIDATA & WIKIPEDIA SAMEAS RECONCILIATION
 // ==========================================
-async function reconcileWithWikidataApi(entityName: string, category: string = "") {
+async function reconcileWithWikidataApi(entityName: string, category: string = "", language: string = "pt") {
   try {
     const cleanQuery = entityName.trim();
     const WIKIDATA_USER_AGENT =
       process.env.WIKIDATA_USER_AGENT ||
       "SemanticoSEO-EntityEngine/2.0 (https://semantico.com.br)";
 
-    // 1. Search in Portuguese first
-    let searchUrl = `https://www.wikidata.org/w/api.php?action=wbsearchentities&search=${encodeURIComponent(cleanQuery)}&language=pt&format=json&limit=5&uselang=pt`;
-    let response = await fetch(searchUrl, {
-      headers: { "User-Agent": WIKIDATA_USER_AGENT },
-      signal: AbortSignal.timeout(10000),
-    });
-    let data: any = await response.json();
-    let results = data.search || [];
+    const langCode = (language || "pt").toLowerCase().slice(0, 2);
+    const searchLangs = langCode === "en" ? ["en", "pt", "es"] : langCode === "es" ? ["es", "en", "pt"] : ["pt", "en", "es"];
 
-    // 2. If no Portuguese results, search in English
-    if (results.length === 0) {
-      searchUrl = `https://www.wikidata.org/w/api.php?action=wbsearchentities&search=${encodeURIComponent(cleanQuery)}&language=en&format=json&limit=5&uselang=en`;
-      response = await fetch(searchUrl, {
+    let results: any[] = [];
+    for (const l of searchLangs) {
+      const searchUrl = `https://www.wikidata.org/w/api.php?action=wbsearchentities&search=${encodeURIComponent(cleanQuery)}&language=${l}&format=json&limit=5&uselang=${l}`;
+      const response = await fetch(searchUrl, {
         headers: { "User-Agent": WIKIDATA_USER_AGENT },
         signal: AbortSignal.timeout(10000),
       });
-      data = await response.json();
-      results = data.search || [];
+      const data: any = await response.json();
+      if (data.search && data.search.length > 0) {
+        results = data.search;
+        break;
+      }
     }
 
     if (results.length === 0) {
@@ -1512,7 +1566,7 @@ async function reconcileWithWikidataApi(entityName: string, category: string = "
     }
 
     const ids = results.slice(0, 3).map((r: any) => r.id).join("|");
-    const detailUrl = `https://www.wikidata.org/w/api.php?action=wbgetentities&ids=${ids}&props=claims|sitelinks/urls|descriptions|labels|aliases&languages=pt|en&format=json`;
+    const detailUrl = `https://www.wikidata.org/w/api.php?action=wbgetentities&ids=${ids}&props=claims|sitelinks/urls|descriptions|labels|aliases&languages=pt|en|es&format=json`;
     const detailRes = await fetch(detailUrl, {
       headers: { "User-Agent": WIKIDATA_USER_AGENT },
       signal: AbortSignal.timeout(10000),
@@ -1528,6 +1582,7 @@ async function reconcileWithWikidataApi(entityName: string, category: string = "
 
       const ptwiki = ent.sitelinks?.ptwiki?.url;
       const enwiki = ent.sitelinks?.enwiki?.url;
+      const eswiki = ent.sitelinks?.eswiki?.url;
       const wikidataUrl = `https://www.wikidata.org/wiki/${resItem.id}`;
 
       // Extract Google Knowledge Graph MID from Wikidata property P646 (Freebase ID / Google KG ID)
@@ -1539,29 +1594,39 @@ async function reconcileWithWikidataApi(entityName: string, category: string = "
 
       const sameAsUrls: string[] = [wikidataUrl];
       if (googleKgUrl) sameAsUrls.push(googleKgUrl);
-      if (ptwiki) sameAsUrls.push(ptwiki);
+      if (ptwiki && !sameAsUrls.includes(ptwiki)) sameAsUrls.push(ptwiki);
       if (enwiki && !sameAsUrls.includes(enwiki)) sameAsUrls.push(enwiki);
+      if (eswiki && !sameAsUrls.includes(eswiki)) sameAsUrls.push(eswiki);
 
-      const labelPt = ent.labels?.pt?.value || ent.labels?.en?.value || resItem.label;
-      const descPt = ent.descriptions?.pt?.value || ent.descriptions?.en?.value || resItem.description || "";
+      const targetLabel = ent.labels?.[langCode]?.value || ent.labels?.en?.value || ent.labels?.pt?.value || resItem.label;
+      const targetDesc = ent.descriptions?.[langCode]?.value || ent.descriptions?.en?.value || ent.descriptions?.pt?.value || resItem.description || "";
       const aliases = [
         ...(ent.aliases?.pt?.map((a: any) => a.value) || []),
         ...(ent.aliases?.en?.map((a: any) => a.value) || []),
+        ...(ent.aliases?.es?.map((a: any) => a.value) || []),
       ];
+
+      // Preferred wikipedia URL based on target language
+      const primaryWiki =
+        langCode === "en" ? (enwiki || ptwiki || eswiki) :
+        langCode === "es" ? (eswiki || enwiki || ptwiki) :
+        (ptwiki || enwiki || eswiki);
 
       // Calculate match score
       let score = 75;
-      if (labelPt.toLowerCase() === cleanQuery.toLowerCase()) score += 20;
-      if (ptwiki) score += 5;
+      if (targetLabel.toLowerCase() === cleanQuery.toLowerCase()) score += 20;
+      if (primaryWiki) score += 5;
       if (googleMid) score += 5;
 
       matches.push({
         wikidataId: resItem.id,
-        label: labelPt,
-        description: descPt,
+        label: targetLabel,
+        description: targetDesc,
         wikidataUrl,
-        wikipediaUrl: ptwiki || enwiki || null,
+        wikipediaUrl: primaryWiki || null,
         wikipediaEnUrl: enwiki || null,
+        wikipediaEsUrl: eswiki || null,
+        wikipediaPtUrl: ptwiki || null,
         googleMid,
         googleKgUrl,
         aliases: Array.from(new Set(aliases)).slice(0, 6),
@@ -1580,13 +1645,13 @@ async function reconcileWithWikidataApi(entityName: string, category: string = "
 // Endpoint: Reconcile single entity with Wikidata & Wikipedia
 app.post("/api/seo-definitions/reconcile-wikidata", async (req, res) => {
   try {
-    const { entity, category = "", definition = "" } = req.body;
+    const { entity, category = "", definition = "", language = "pt" } = req.body;
     if (!entity) {
       return res.status(400).json({ error: "Nome da entidade é obrigatório" });
     }
 
     // First try direct Wikidata API
-    const directMatches = await reconcileWithWikidataApi(entity, category);
+    const directMatches = await reconcileWithWikidataApi(entity, category, language);
 
     if (directMatches && directMatches.length > 0) {
       return res.json({
@@ -1601,9 +1666,14 @@ app.post("/api/seo-definitions/reconcile-wikidata", async (req, res) => {
     let aiFallbackMatch = null;
     try {
       const ai = getGeminiClient();
+      const langCode = (language || "pt").toLowerCase().slice(0, 2);
+      const wikiLangSpec = langCode === "en" ? "URL da Wikipedia em Inglês (ou Português)" : langCode === "es" ? "URL da Wikipedia em Espanhol (ou Inglês)" : "URL da Wikipedia em Português ou Inglês";
+
       const prompt = `Você é um especialista em Ontologias, Web Semântica, Wikidata e Google Knowledge Graph.
 Encontre o identificador Wikidata (Q-ID) canônico, o identificador do Google Knowledge Graph Machine ID (googleMid, ex: "/m/02csf" ou "/g/11b...") e o artigo oficial da Wikipedia para a entidade conceitual: "${entity}" (Categoria: "${category}").
 Contexto/Definição: "${definition}".
+
+${getLangPromptInstructions(language)}
 
 Responda em formato JSON com:
 - wikidataId: Ex: "Q11053"
@@ -1612,8 +1682,8 @@ Responda em formato JSON com:
 - description: Descrição curta e precisa
 - wikidataUrl: Ex: "https://www.wikidata.org/wiki/Q11053"
 - googleKgUrl: Ex: "https://www.google.com/search?kgmid=/m/02csf" ou null
-- wikipediaUrl: URL da Wikipedia em Português ou Inglês
-- sameAsUrls: Array com as URLs de autoridade (Wikidata, Google Knowledge Graph, Wikipedia PT, Wikipedia EN)
+- wikipediaUrl: ${wikiLangSpec}
+- sameAsUrls: Array com as URLs de autoridade (Wikidata, Google Knowledge Graph, Wikipedia)
 - confidence: Número de 0 a 100`;
 
       const { response } = await callGeminiWithCascade(
@@ -1688,7 +1758,7 @@ Responda em formato JSON com:
 // Endpoint: Batch reconcile multiple entities with Wikidata
 app.post("/api/seo-definitions/reconcile-batch", async (req, res) => {
   try {
-    const { entities = [] } = req.body;
+    const { entities = [], language = "pt" } = req.body;
     if (!Array.isArray(entities) || entities.length === 0) {
       return res.status(400).json({ error: "Lista de entidades vazia" });
     }
@@ -1697,7 +1767,7 @@ app.post("/api/seo-definitions/reconcile-batch", async (req, res) => {
     for (const item of entities.slice(0, 30)) {
       const entityName = typeof item === "string" ? item : item.entity;
       const category = typeof item === "object" ? item.category : "";
-      const matches = await reconcileWithWikidataApi(entityName, category);
+      const matches = await reconcileWithWikidataApi(entityName, category, language);
       results.push({
         id: item.id || null,
         entity: entityName,

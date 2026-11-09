@@ -21,6 +21,7 @@ import {
   Settings2
 } from "lucide-react";
 import { SeoEntityDefinition } from "../types";
+import { SupportedLang, getTranslations } from "../lib/i18n";
 
 interface DefinitionsTableProps {
   definitions: SeoEntityDefinition[];
@@ -33,6 +34,7 @@ interface DefinitionsTableProps {
   onOpenTopicalAudit?: () => void;
   onOpenWikidataModal?: () => void;
   onOpenPromptModal?: () => void;
+  uiLang?: SupportedLang;
 }
 
 export const DefinitionsTable: React.FC<DefinitionsTableProps> = ({
@@ -46,7 +48,9 @@ export const DefinitionsTable: React.FC<DefinitionsTableProps> = ({
   onOpenTopicalAudit,
   onOpenWikidataModal,
   onOpenPromptModal,
+  uiLang = "pt",
 }) => {
+  const t = getTranslations(uiLang);
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedCategory, setSelectedCategory] = useState<string>("all");
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
@@ -106,7 +110,7 @@ export const DefinitionsTable: React.FC<DefinitionsTableProps> = ({
 
   const handleDeleteSelected = () => {
     if (selectedIds.size === 0) return;
-    if (window.confirm(`Deseja remover as ${selectedIds.size} entidades selecionadas?`)) {
+    if (window.confirm(`${t.table.deleteConfirm} (${selectedIds.size})`)) {
       selectedIds.forEach((id) => onDeleteEntity(id));
       setSelectedIds(new Set());
     }
@@ -118,14 +122,14 @@ export const DefinitionsTable: React.FC<DefinitionsTableProps> = ({
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-1">
         <div>
           <div className="inline-flex items-center gap-2 text-[11px] font-bold uppercase tracking-widest text-[#1a5d38] mb-1">
-            <span className="w-2 h-2 rounded-full bg-[#1a5d38] animate-pulse" />
-            <span>Gerador de Entidades · Base Ontológica</span>
+            <span className="w-2 h-2 rounded-full bg-[#1a5d38] animate-pulse" aria-hidden="true" />
+            <span>{t.table.badge}</span>
           </div>
           <h1 className="font-serif text-3xl sm:text-4xl text-[#0a0f1d] font-normal tracking-tight">
-            Gerador de Glossário de Entidades
+            {t.table.title}
           </h1>
           <p className="text-slate-600 text-xs sm:text-sm mt-1">
-            Definições estruturadas para autoridade tópica, Schema.org, SameAs (Wikidata) e GraphRAG.
+            {t.table.subtitle}
           </p>
         </div>
 
@@ -133,47 +137,49 @@ export const DefinitionsTable: React.FC<DefinitionsTableProps> = ({
           {onOpenTopicalAudit && (
             <button
               onClick={onOpenTopicalAudit}
-              className="px-3.5 py-2 rounded-xl bg-purple-50 hover:bg-purple-100 border border-purple-200 text-purple-900 text-xs font-bold shadow-2xs transition-all flex items-center gap-1.5 cursor-pointer active:scale-98"
+              className="min-h-[44px] px-3.5 py-2 rounded-xl bg-purple-50 hover:bg-purple-100 border border-purple-200 text-purple-900 text-xs font-bold shadow-2xs transition-all flex items-center gap-1.5 cursor-pointer active:scale-98"
             >
-              <Target className="w-3.5 h-3.5 text-purple-600" />
-              <span>Auditoria Tópica</span>
+              <Target className="w-3.5 h-3.5 text-purple-600" aria-hidden="true" />
+              <span>{t.subnav.topicalAudit}</span>
             </button>
           )}
 
           {onOpenWikidataModal && (
             <button
               onClick={onOpenWikidataModal}
-              className="hidden lg:flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-white hover:bg-slate-50 border border-slate-300 text-slate-700 text-xs font-semibold shadow-2xs transition-all cursor-pointer active:scale-98"
-              title="Reconciliação e vinculação Wikidata SameAs"
+              className="hidden lg:flex min-h-[44px] items-center gap-1.5 px-3.5 py-2 rounded-xl bg-white hover:bg-slate-50 border border-slate-300 text-slate-700 text-xs font-semibold shadow-2xs transition-all cursor-pointer active:scale-98"
+              title={t.wikidataModal.title}
+              aria-label={t.wikidataModal.title}
             >
-              <Globe className="w-3.5 h-3.5 text-[#1a5d38]" />
-              <span>Wikidata</span>
+              <Globe className="w-3.5 h-3.5 text-[#1a5d38]" aria-hidden="true" />
+              <span>{t.subnav.wikidata}</span>
             </button>
           )}
 
           <button
             onClick={onOpenBatchModal}
-            className="px-4 py-2 rounded-xl bg-white hover:bg-slate-50 border border-slate-300 text-slate-800 text-xs font-semibold shadow-2xs transition-all flex items-center gap-1.5 cursor-pointer active:scale-98"
+            className="min-h-[44px] px-4 py-2 rounded-xl bg-white hover:bg-slate-50 border border-slate-300 text-slate-800 text-xs font-semibold shadow-2xs transition-all flex items-center gap-1.5 cursor-pointer active:scale-98"
           >
-            <Layers className="w-3.5 h-3.5 text-[#1a5d38]" />
-            <span>Extração em Lote</span>
+            <Layers className="w-3.5 h-3.5 text-[#1a5d38]" aria-hidden="true" />
+            <span>{t.subnav.batch}</span>
           </button>
 
           <button
             onClick={onOpenSingleModal}
-            className="px-4 py-2 rounded-xl bg-[#f5be38] hover:bg-[#eab308] text-slate-950 text-xs font-bold shadow-2xs transition-all flex items-center gap-1.5 cursor-pointer active:scale-98"
+            className="min-h-[44px] px-4 py-2 rounded-xl bg-[#f5be38] hover:bg-[#eab308] text-slate-950 text-xs font-bold shadow-2xs transition-all flex items-center gap-1.5 cursor-pointer active:scale-98"
           >
-            <Sparkles className="w-3.5 h-3.5 text-slate-950" />
-            <span>Nova Entidade</span>
+            <Sparkles className="w-3.5 h-3.5 text-slate-950" aria-hidden="true" />
+            <span>{t.subnav.newEntity}</span>
           </button>
 
           {onOpenPromptModal && (
             <button
               onClick={onOpenPromptModal}
-              className="p-2 rounded-xl bg-white hover:bg-slate-50 border border-slate-300 text-slate-600 hover:text-slate-900 shadow-2xs transition-all cursor-pointer active:scale-98"
-              title="Configurações de Prompts & Modelos de IA"
+              className="min-h-[44px] min-w-[44px] p-2 rounded-xl bg-white hover:bg-slate-50 border border-slate-300 text-slate-600 hover:text-slate-900 shadow-2xs transition-all cursor-pointer active:scale-98 flex items-center justify-center"
+              title={uiLang === "en" ? "AI Model & Prompt Settings" : uiLang === "es" ? "Configuración de Prompts y Modelos de IA" : "Configurações de Prompts & Modelos de IA"}
+              aria-label={uiLang === "en" ? "AI Model & Prompt Settings" : uiLang === "es" ? "Configuración de Prompts y Modelos de IA" : "Configurações de Prompts & Modelos de IA"}
             >
-              <Settings2 className="w-4 h-4" />
+              <Settings2 className="w-4 h-4" aria-hidden="true" />
             </button>
           )}
         </div>
@@ -185,19 +191,20 @@ export const DefinitionsTable: React.FC<DefinitionsTableProps> = ({
           
           {/* Search Box */}
           <div className="relative w-full sm:w-88">
-            <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+            <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" aria-hidden="true" />
             <input
               id="search-input"
               type="text"
-              placeholder="Buscar por entidade, termo ou conteúdo..."
+              placeholder={t.table.searchPlaceholder}
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full pl-9 pr-4 py-2 text-xs sm:text-sm bg-slate-50/80 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#1a5d38]/20 focus:border-[#1a5d38] text-slate-800 placeholder-slate-400 transition-all"
+              className="w-full pl-9 pr-4 py-2 text-base sm:text-sm bg-slate-50/80 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#1a5d38]/20 focus:border-[#1a5d38] text-slate-800 placeholder-slate-400 transition-all"
             />
             {searchQuery && (
               <button
                 onClick={() => setSearchQuery("")}
-                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-xs text-slate-400 hover:text-slate-600 px-1 cursor-pointer"
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-xs text-slate-400 hover:text-slate-600 px-1 cursor-pointer min-h-[32px] min-w-[32px] flex items-center justify-center"
+                aria-label={uiLang === "en" ? "Clear search" : uiLang === "es" ? "Limpiar búsqueda" : "Limpar busca"}
               >
                 ✕
               </button>
@@ -207,17 +214,17 @@ export const DefinitionsTable: React.FC<DefinitionsTableProps> = ({
           {/* Category Filter & Stats */}
           <div className="flex items-center gap-2.5 w-full sm:w-auto overflow-x-auto pb-1 sm:pb-0">
             <div className="flex items-center gap-1.5 text-xs text-slate-500 font-bold uppercase tracking-wider whitespace-nowrap">
-              <Filter className="w-3.5 h-3.5 text-slate-400" />
-              <span>Categoria:</span>
+              <Filter className="w-3.5 h-3.5 text-slate-400" aria-hidden="true" />
+              <span>{t.table.categoryFilter}</span>
             </div>
             
             <select
               id="category-filter"
               value={selectedCategory}
               onChange={(e) => setSelectedCategory(e.target.value)}
-              className="text-xs font-semibold bg-slate-50/80 border border-slate-200 text-slate-700 rounded-xl px-3 py-2 focus:outline-none focus:ring-2 focus:ring-[#1a5d38]/20 focus:border-[#1a5d38] cursor-pointer"
+              className="text-base sm:text-xs font-semibold bg-slate-50/80 border border-slate-200 text-slate-700 rounded-xl px-3 py-2 focus:outline-none focus:ring-2 focus:ring-[#1a5d38]/20 focus:border-[#1a5d38] cursor-pointer min-h-[44px]"
             >
-              <option value="all">Todas as Categorias ({definitions.length})</option>
+              <option value="all">{t.table.allCategories} ({definitions.length})</option>
               {categories.map((cat) => {
                 const count = definitions.filter((d) => d.category === cat).length;
                 return (
@@ -232,10 +239,10 @@ export const DefinitionsTable: React.FC<DefinitionsTableProps> = ({
               <button
                 id="btn-delete-bulk-selected"
                 onClick={handleDeleteSelected}
-                className="flex items-center gap-1 text-xs font-semibold text-rose-700 bg-rose-50 hover:bg-rose-100 border border-rose-200 rounded-xl px-3 py-2 transition-colors ml-auto sm:ml-0 cursor-pointer"
+                className="min-h-[44px] flex items-center gap-1 text-xs font-semibold text-rose-700 bg-rose-50 hover:bg-rose-100 border border-rose-200 rounded-xl px-3 py-2 transition-colors ml-auto sm:ml-0 cursor-pointer"
               >
-                <Trash2 className="w-3.5 h-3.5" />
-                <span>Excluir ({selectedIds.size})</span>
+                <Trash2 className="w-3.5 h-3.5" aria-hidden="true" />
+                <span>{t.table.deleteSelected} ({selectedIds.size})</span>
               </button>
             )}
           </div>
@@ -248,35 +255,35 @@ export const DefinitionsTable: React.FC<DefinitionsTableProps> = ({
         {filteredDefinitions.length === 0 ? (
           <div className="p-12 text-center">
             <div className="w-14 h-14 bg-slate-50 border border-slate-200 rounded-2xl flex items-center justify-center mx-auto mb-3 text-slate-400">
-              <AlertCircle className="w-6 h-6" />
+              <AlertCircle className="w-6 h-6" aria-hidden="true" />
             </div>
             <h3 className="text-base font-bold text-slate-800 mb-1">
-              Nenhuma entidade encontrada
+              {t.table.emptyTitle}
             </h3>
             <p className="text-sm text-slate-500 max-w-md mx-auto mb-5">
               {searchQuery || selectedCategory !== "all"
-                ? "Tente ajustar os filtros de busca ou categoria para encontrar os termos cadastrados."
-                : "Seu glossário semântico ainda não possui termos. Comece adicionando ou gerando em lote!"}
+                ? t.table.emptyFiltered
+                : t.table.emptySubtitle}
             </p>
             <div className="flex items-center justify-center gap-3">
               <button
                 onClick={onOpenSingleModal}
-                className="px-5 py-2.5 bg-[#f5be38] hover:bg-[#eab308] text-slate-950 text-xs font-bold rounded-xl transition-all shadow-2xs flex items-center gap-1.5 cursor-pointer"
+                className="min-h-[44px] px-5 py-2.5 bg-[#f5be38] hover:bg-[#eab308] text-slate-950 text-xs font-bold rounded-xl transition-all shadow-2xs flex items-center gap-1.5 cursor-pointer"
               >
-                <Sparkles className="w-4 h-4" />
-                <span>Nova Entidade</span>
+                <Sparkles className="w-4 h-4" aria-hidden="true" />
+                <span>{t.subnav.newEntity}</span>
               </button>
               <button
                 onClick={onOpenBatchModal}
-                className="px-5 py-2.5 bg-[#0a0f1d] hover:bg-[#1a233a] text-white text-xs font-semibold rounded-xl transition-colors flex items-center gap-1.5 cursor-pointer shadow-2xs"
+                className="min-h-[44px] px-5 py-2.5 bg-[#0a0f1d] hover:bg-[#1a233a] text-white text-xs font-semibold rounded-xl transition-colors flex items-center gap-1.5 cursor-pointer shadow-2xs"
               >
-                <Layers className="w-4 h-4 text-[#f5be38]" />
-                <span>Extrair ou Gerar em Lote</span>
+                <Layers className="w-4 h-4 text-[#f5be38]" aria-hidden="true" />
+                <span>{t.subnav.batch}</span>
               </button>
             </div>
           </div>
         ) : (
-          <div className="overflow-x-auto">
+          <div className="overflow-x-auto" role="region" tabIndex={0} aria-label={t.table.title}>
             <table className="w-full text-left border-collapse">
               <thead>
                 <tr className="bg-slate-50/90 border-b border-slate-200 text-[11px] font-bold text-slate-600 uppercase tracking-wider">
@@ -292,11 +299,11 @@ export const DefinitionsTable: React.FC<DefinitionsTableProps> = ({
                       className="rounded border-slate-300 text-slate-900 focus:ring-[#1a5d38] h-4 w-4 cursor-pointer"
                     />
                   </th>
-                  <th className="py-3 px-4 w-48 font-bold">Entidade / Termo</th>
-                  <th className="py-3 px-4 w-36 font-bold">Categoria</th>
-                  <th className="py-3 px-4 font-bold">Definição Semântica</th>
-                  <th className="py-3 px-4 w-48 font-bold">Fontes de Autoridade</th>
-                  <th className="py-3 px-4 w-28 text-right font-bold">Ações</th>
+                  <th className="py-3 px-4 w-48 font-bold">{t.table.thEntity}</th>
+                  <th className="py-3 px-4 w-36 font-bold">{t.table.thCategory}</th>
+                  <th className="py-3 px-4 font-bold">{t.table.thDefinition}</th>
+                  <th className="py-3 px-4 w-48 font-bold">{t.table.thSources}</th>
+                  <th className="py-3 px-4 w-28 text-right font-bold">{t.table.thActions}</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 text-xs text-slate-700">
@@ -391,14 +398,14 @@ export const DefinitionsTable: React.FC<DefinitionsTableProps> = ({
                           <p className="text-xs text-slate-700 line-clamp-3 leading-relaxed">
                             {item.definition || (
                               <span className="text-slate-400 italic">
-                                {isGenerating ? "Gerando definição com Gemini AI..." : "Nenhuma definição gerada."}
+                                {isGenerating ? t.table.generatingDef : t.table.noDef}
                               </span>
                             )}
                           </p>
 
                           {/* Quick semantic related keywords pill tags */}
                           {item.lsiKeywords && item.lsiKeywords.length > 0 && (
-                            <div className="flex flex-wrap items-center gap-1.5 pt-1" title="Termos semanticamente relacionados">
+                            <div className="flex flex-wrap items-center gap-1.5 pt-1" title={t.table.relatedTermsTitle}>
                               {item.lsiKeywords.slice(0, 4).map((kw, i) => (
                                 <span
                                   key={i}
@@ -413,7 +420,7 @@ export const DefinitionsTable: React.FC<DefinitionsTableProps> = ({
                                 </span>
                               )}
                               <span className="text-[10px] text-slate-400 ml-auto font-mono">
-                                {wordsCount} palavras
+                                {wordsCount} {t.table.words}
                               </span>
                             </div>
                           )}
@@ -447,7 +454,7 @@ export const DefinitionsTable: React.FC<DefinitionsTableProps> = ({
                             })
                           ) : (
                             <span className="text-[11px] text-slate-400 italic">
-                              Sem fontes
+                              {t.table.noSources}
                             </span>
                           )}
                         </div>
@@ -525,12 +532,12 @@ export const DefinitionsTable: React.FC<DefinitionsTableProps> = ({
         {/* Footer Summary Stats */}
         <div className="bg-slate-50/90 border-t border-slate-200 px-4 py-3 flex flex-col sm:flex-row items-center justify-between text-xs text-slate-500 gap-2">
           <div>
-            Exibindo <span className="font-bold text-[#302c33]">{filteredDefinitions.length}</span> de{" "}
-            <span className="font-bold text-[#302c33]">{definitions.length}</span> entidades cadastradas
+            {t.table.footerShowing} <span className="font-bold text-[#302c33]">{filteredDefinitions.length}</span> {t.table.footerOf}{" "}
+            <span className="font-bold text-[#302c33]">{definitions.length}</span> {t.table.footerEntities}
           </div>
           <div className="flex items-center gap-4 text-slate-500">
             <span>
-              Otimizado para <strong>Schema.org DefinedTerm</strong>, <strong>Knowledge Graph</strong> e <strong>Google Rich Results</strong>
+              {t.table.footerOptimized}
             </span>
           </div>
         </div>
@@ -547,15 +554,15 @@ export const DefinitionsTable: React.FC<DefinitionsTableProps> = ({
           </div>
           <div>
             <p className="text-xs sm:text-sm font-bold text-[#302c33] group-hover:text-[#590050] transition-colors">
-              Processamento em Lote & Mineração de Artigos
+              {t.table.bulkBannerTitle}
             </p>
             <p className="text-xs text-slate-500">
-              Cole artigos completos ou listas de termos para gerar dezenas de definições semânticas instantaneamente
+              {t.table.bulkBannerDesc}
             </p>
           </div>
         </div>
         <button className="hidden sm:inline-flex items-center gap-1.5 px-3.5 py-1.5 bg-[#000000] hover:bg-[#302c33] text-[#fdd910] text-xs font-bold rounded-lg shadow-sm transition-all">
-          <span>Abrir Gerador em Lote</span>
+          <span>{t.table.bulkBannerBtn}</span>
         </button>
       </div>
     </div>

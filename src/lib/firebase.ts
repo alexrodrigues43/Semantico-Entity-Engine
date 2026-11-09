@@ -38,10 +38,13 @@ const app = getApps().length > 0 ? getApp() : initializeApp(firebaseConfig);
 // Initialize Firebase Auth
 export const auth = getAuth(app);
 
-// Initialize Firestore (using custom firestoreDatabaseId if provided in config)
+// Initialize Firestore (using custom firestoreDatabaseId if provided in config for local entities)
 export const db = firebaseConfig.firestoreDatabaseId
   ? getFirestore(app, firebaseConfig.firestoreDatabaseId)
   : getFirestore(app);
+
+// Central Database for the Suite (Single Source of Truth for Credits, Users and Transactions)
+export const centralDb = getFirestore(app, "semantico-suite-core");
 
 // Auth Providers
 export const googleProvider = new GoogleAuthProvider();
@@ -58,50 +61,167 @@ export function isSuperAdminEmail(email?: string | null): boolean {
 }
 
 /**
- * Creates or retrieves user profile from Firestore, guaranteeing Super Admin privileges for alexrodrigues43@gmail.com
+ * Sanitiza recursivamente objetos removendo campos undefined para compatibilidade com o Firestore
+ */
+export function sanitizeForFirestore<T extends Record<string, any>>(obj: T): Record<string, any> {
+  const clean: Record<string, any> = {};
+  for (const [key, val] of Object.entries(obj)) {
+    if (val !== undefined) {
+      if (val && typeof val === "object" && !Array.isArray(val) && !(val instanceof Date)) {
+        clean[key] = sanitizeForFirestore(val);
+      } else {
+        clean[key] = val;
+      }
+    }
+  }
+  return clean;
+}
+
+/**
+ * Creates or retrieves user profile from Central Firestore (semantico-suite-core),
+ * guaranteeing Super Admin privileges for alexrodrigues43@gmail.com and trial credits for new clients.
  */
 export async function syncUserProfile(user: FirebaseUser): Promise<UserProfile> {
-  const userRef = doc(db, "users", user.uid);
+  const userRef = doc(centralDb, "users", user.uid);
   const userSnap = await getDoc(userRef);
   const isSuperAdmin = isSuperAdminEmail(user.email);
+  const now = new Date().toISOString();
 
   if (!userSnap.exists()) {
-    // New user document
+    // New user document in Central Suite
     const newProfile: UserProfile = {
       uid: user.uid,
       email: user.email || "",
       displayName: user.displayName || user.email?.split("@")[0] || "Usuário",
-      photoURL: user.photoURL || undefined,
+      photoURL: user.photoURL || "",
       role: isSuperAdmin ? "admin" : "client",
-      status: isSuperAdmin ? "active" : "pending",
+      status: "active",
       plan: isSuperAdmin ? "lifetime" : "trial",
-      createdAt: new Date().toISOString(),
-      lastLoginAt: new Date().toISOString(),
-      notes: isSuperAdmin ? "Super Administrador Master Automático" : "",
+      creditsBalance: isSuperAdmin ? 999999 : 10,
+      creditsUsed: 0,
+      createdAt: now,
+      lastLoginAt: now,
+      lastAppUsed: "Glossário de Entidades",
+      notes: isSuperAdmin ? "Super Administrador Master Automático" : "Trial inicial da Suíte",
       toolUsageCount: 0,
     };
 
-    await setDoc(userRef, newProfile);
+    await setDoc(userRef, sanitizeForFirestore(newProfile));
+
+    // Registra transação inicial de degustação
+    if (!isSuperAdmin) {
+      try {
+        const txRef = doc(collection(centralDb, "credit_transactions"));
+        await setDoc(txRef, {
+          id: txRef.id,
+          uid: user.uid,
+          userEmail: user.email || "",
+          type: "trial",
+          app: "Glossário de Entidades",
+          amount: 10,
+          balanceAfter: 10,
+          description: "Bônus de degustação da Suíte Semântico (10 créditos)",
+          timestamp: now,
+        });
+      } catch (txErr) {
+        console.warn("[Carteira] Falha ao gravar transação de trial:", txErr);
+      }
+    }
+
     return newProfile;
   } else {
     // Existing user: update last login and ensure super admin if email matches
     const existing = userSnap.data() as UserProfile;
     const updates: Partial<UserProfile> = {
-      lastLoginAt: new Date().toISOString(),
+      lastLoginAt: now,
+      lastAppUsed: "Glossário de Entidades",
       displayName: user.displayName || existing.displayName || user.email?.split("@")[0] || "Usuário",
-      photoURL: user.photoURL || existing.photoURL,
+      photoURL: user.photoURL || existing.photoURL || "",
     };
 
-    // If super admin email, enforce role and status
-    if (isSuperAdmin && (existing.role !== "admin" || existing.status !== "active")) {
+    // If super admin email, enforce role, status and unlimited credits
+    if (isSuperAdmin) {
       updates.role = "admin";
       updates.status = "active";
       updates.plan = "lifetime";
+      updates.creditsBalance = 999999;
     }
 
-    await updateDoc(userRef, updates);
+    await updateDoc(userRef, sanitizeForFirestore(updates));
     return { ...existing, ...updates };
   }
+}
+
+/**
+ * Escuta em tempo real o saldo da carteira central no semantico-suite-core
+ */
+export function subscribeCentralWallet(
+  uid: string,
+  onUpdate: (profile: UserProfile) => void
+): () => void {
+  const userRef = doc(centralDb, "users", uid);
+  return onSnapshot(
+    userRef, 
+    (snap) => {
+      if (snap.exists()) {
+        onUpdate(snap.data() as UserProfile);
+      }
+    },
+    (err) => {
+      console.warn("[Carteira Central] Erro ao sincronizar carteira:", err);
+    }
+  );
+}
+
+/**
+ * Debita créditos atomicamente na base central semantico-suite-core e registra no extrato
+ */
+export async function deductCredits(
+  uid: string,
+  amount: number,
+  actionDescription: string,
+  userEmail: string
+): Promise<boolean> {
+  const isSuperAdmin = isSuperAdminEmail(userEmail);
+  if (isSuperAdmin) return true; // Super Admin possui créditos infinitos
+
+  const userRef = doc(centralDb, "users", uid);
+  const snap = await getDoc(userRef);
+  if (!snap.exists()) return false;
+
+  const currentData = snap.data() as UserProfile;
+  const currentBalance = currentData.creditsBalance ?? 0;
+  if (currentBalance < amount) {
+    return false; // Saldo insuficiente
+  }
+
+  const now = new Date().toISOString();
+  await updateDoc(userRef, {
+    creditsBalance: increment(-amount),
+    creditsUsed: increment(amount),
+    lastAppUsed: "Glossário de Entidades",
+    lastLoginAt: now,
+  });
+
+  // Registra no extrato de transações
+  try {
+    const txRef = doc(collection(centralDb, "credit_transactions"));
+    await setDoc(txRef, {
+      id: txRef.id,
+      uid,
+      userEmail,
+      type: "usage",
+      app: "Glossário de Entidades",
+      amount: -amount,
+      balanceAfter: currentBalance - amount,
+      description: actionDescription,
+      timestamp: now,
+    });
+  } catch (err) {
+    console.warn("[Carteira] Falha ao registrar transação no extrato:", err);
+  }
+
+  return true;
 }
 
 /**
@@ -167,6 +287,18 @@ export async function incrementUserToolUsage(uid: string): Promise<void> {
 }
 
 /**
+ * Update user UI Language preference in centralDb
+ */
+export async function updateUserUiLang(uid: string, uiLang: string): Promise<void> {
+  try {
+    const userRef = doc(centralDb, "users", uid);
+    await updateDoc(userRef, { uiLang });
+  } catch (err) {
+    console.warn("Could not update user uiLang in centralDb:", err);
+  }
+}
+
+/**
  * Admin: Update user status or plan or notes
  */
 export async function adminUpdateUser(
@@ -219,23 +351,6 @@ export async function getAuthHeaders(): Promise<Record<string, string>> {
   }
 
   return headers;
-}
-
-/**
- * Sanitiza recursivamente objetos removendo campos undefined para compatibilidade com o Firestore
- */
-function sanitizeForFirestore<T extends Record<string, any>>(obj: T): Record<string, any> {
-  const clean: Record<string, any> = {};
-  for (const [key, val] of Object.entries(obj)) {
-    if (val !== undefined) {
-      if (val && typeof val === "object" && !Array.isArray(val) && !(val instanceof Date)) {
-        clean[key] = sanitizeForFirestore(val);
-      } else {
-        clean[key] = val;
-      }
-    }
-  }
-  return clean;
 }
 
 /**

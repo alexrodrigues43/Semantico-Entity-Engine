@@ -22,16 +22,19 @@ echo ""
 API_KEY_FROM_ENV=""
 ADMIN_PASS_FROM_ENV=""
 BETA_PASS_FROM_ENV=""
+BLOG_KEY_FROM_ENV=""
 
 if [ -f .env ]; then
   API_KEY_FROM_ENV=$(grep "^GEMINI_API_KEY=" .env | cut -d '=' -f2- | tr -d '"' | tr -d "'" | tr -d '\r')
   ADMIN_PASS_FROM_ENV=$(grep "^ADMIN_PASSWORD=" .env | cut -d '=' -f2- | tr -d '"' | tr -d "'" | tr -d '\r')
   BETA_PASS_FROM_ENV=$(grep "^BETA_PASSCODES=" .env | cut -d '=' -f2- | tr -d '"' | tr -d "'" | tr -d '\r')
+  BLOG_KEY_FROM_ENV=$(grep "^BlogSemantico=" .env | cut -d '=' -f2- | tr -d '"' | tr -d "'" | tr -d '\r')
 fi
 
 API_KEY=${GEMINI_API_KEY:-$API_KEY_FROM_ENV}
 ADMIN_PASSWORD=${ADMIN_PASSWORD:-$ADMIN_PASS_FROM_ENV}
 BETA_PASSCODES=${BETA_PASSCODES:-$BETA_PASS_FROM_ENV}
+BLOG_KEY=${BlogSemantico:-${BLOG_KEY_FROM_ENV:-$API_KEY}}
 
 # Gerar arquivo de variáveis YAML seguro para o gcloud run deploy
 trap 'rm -f env.yaml' EXIT
@@ -40,11 +43,17 @@ cat <<EOF > env.yaml
 NODE_ENV: "production"
 DEFAULT_MODEL: "gemini-3.8-flash"
 APP_URL: "https://${CUSTOM_DOMAIN}"
+FIREBASE_PROJECT_ID: "${PROJECT_ID}"
 EOF
 
 if [ -n "$API_KEY" ]; then
   echo "🔑 GEMINI_API_KEY configurada."
   echo "GEMINI_API_KEY: \"$API_KEY\"" >> env.yaml
+fi
+
+if [ -n "$BLOG_KEY" ]; then
+  echo "🔑 BlogSemantico configurada."
+  echo "BlogSemantico: \"$BLOG_KEY\"" >> env.yaml
 fi
 
 if [ -n "$ADMIN_PASSWORD" ]; then
@@ -58,10 +67,16 @@ if [ -n "$BETA_PASSCODES" ]; then
 fi
 
 # 2. Deploy do container via Cloud Build
+IMAGE_TAG="us-central1-docker.pkg.dev/$PROJECT_ID/cloud-run-source-deploy/$SERVICE_NAME:latest"
+
 echo ""
-echo "🔨 Compilando container com Cloud Build e provisionando no Cloud Run..."
+echo "📦 1. Compilando container com Cloud Build..."
+gcloud builds submit --tag "$IMAGE_TAG" --project="$PROJECT_ID" --quiet
+
+echo ""
+echo "🚀 2. Publicando revisao no Google Cloud Run..."
 gcloud run deploy "$SERVICE_NAME" \
-  --source . \
+  --image="$IMAGE_TAG" \
   --project="$PROJECT_ID" \
   --region="$REGION" \
   --platform=managed \
@@ -82,6 +97,7 @@ echo ""
 echo "🔐 Autorizando domínios no Firebase Authentication (eliminando auth/unauthorized-domain)..."
 python3 ./authorize_firebase_domain.py "$SERVICE_URL" "$PROJECT_ID" || true
 python3 ./authorize_firebase_domain.py "$CUSTOM_DOMAIN" "$PROJECT_ID" || true
+python3 ./authorize_firebase_domain.py "auth.semantico.com.br" "$PROJECT_ID" || true
 
 echo ""
 echo "=============================================================================="

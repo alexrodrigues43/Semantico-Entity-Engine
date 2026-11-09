@@ -16,6 +16,7 @@ import {
   Plus
 } from "lucide-react";
 import { SeoEntityDefinition, WikidataMatch } from "../types";
+import { SupportedLang, getTranslations } from "../lib/i18n";
 
 interface WikidataReconcileModalProps {
   isOpen: boolean;
@@ -25,6 +26,7 @@ interface WikidataReconcileModalProps {
   onApplyReconciliation: (entityId: string, match: WikidataMatch) => void;
   onBulkApplyReconciliation?: (updates: { id: string; match: WikidataMatch }[]) => void;
   onClearReconciliation?: (entityId: string) => void;
+  uiLang?: SupportedLang;
 }
 
 export const WikidataReconcileModal: React.FC<WikidataReconcileModalProps> = ({
@@ -35,7 +37,9 @@ export const WikidataReconcileModal: React.FC<WikidataReconcileModalProps> = ({
   onApplyReconciliation,
   onBulkApplyReconciliation,
   onClearReconciliation,
+  uiLang = "pt",
 }) => {
+  const t = getTranslations(uiLang);
   const [searchTerm, setSearchTerm] = useState(entity?.entity || "");
   const [category, setCategory] = useState(entity?.category || "");
   const [isLoading, setIsLoading] = useState(false);
@@ -79,6 +83,7 @@ export const WikidataReconcileModal: React.FC<WikidataReconcileModalProps> = ({
           entity: q,
           category: catToUse || category,
           definition: entity?.definition || "",
+          language: uiLang,
         }),
       });
 
@@ -172,6 +177,7 @@ export const WikidataReconcileModal: React.FC<WikidataReconcileModalProps> = ({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           entities: allEntities.map((e) => ({ id: e.id, entity: e.entity, category: e.category })),
+          language: uiLang,
         }),
       });
 
@@ -208,14 +214,14 @@ export const WikidataReconcileModal: React.FC<WikidataReconcileModalProps> = ({
             <div>
               <div className="flex items-center gap-2">
                 <h2 className="text-base font-bold text-white">
-                  Reconciliação com Wikidata & Wikipedia (sameAs)
+                  {t.wikidataModal.title}
                 </h2>
                 <span className="text-[10px] uppercase font-black px-2 py-0.5 rounded-full bg-[#7bc970]/20 text-[#7bc970] border border-[#7bc970]/30">
                   Knowledge Graph
                 </span>
               </div>
               <p className="text-xs text-slate-300">
-                Vincule identificadores únicos mundiais (Q-ID) e URLs canônicas ao seu Schema.org
+                {t.wikidataModal.subtitle}
               </p>
             </div>
           </div>
@@ -238,7 +244,7 @@ export const WikidataReconcileModal: React.FC<WikidataReconcileModalProps> = ({
             }`}
           >
             <Search className="w-3.5 h-3.5" />
-            <span>Reconciliar Entidade Atual {entity ? `(${entity.entity})` : ""}</span>
+            <span>{t.wikidataModal.tabSingle} {entity ? `(${entity.entity})` : ""}</span>
           </button>
 
           {allEntities.length > 0 && (
@@ -251,7 +257,7 @@ export const WikidataReconcileModal: React.FC<WikidataReconcileModalProps> = ({
               }`}
             >
               <Layers className="w-3.5 h-3.5 text-[#590050]" />
-              <span>Reconciliar Glossário em Lote ({allEntities.length} termos)</span>
+              <span>{t.wikidataModal.tabBulk} ({allEntities.length} {uiLang === "en" ? "terms" : uiLang === "es" ? "términos" : "termos"})</span>
             </button>
           )}
         </div>
@@ -266,7 +272,7 @@ export const WikidataReconcileModal: React.FC<WikidataReconcileModalProps> = ({
                   <div className="flex items-center gap-2">
                     <CheckCircle2 className="w-4 h-4 text-blue-600 shrink-0" />
                     <span className="text-blue-900">
-                      Entidade vinculada atualmente: <strong className="font-mono font-bold">{entity.wikidataId || "Sem Q-ID"}</strong> ({entity.sameAs?.length || 0} URLs sameAs)
+                      {t.wikidataModal.linkedCurrent} <strong className="font-mono font-bold">{entity.wikidataId || "Sem Q-ID"}</strong> ({entity.sameAs?.length || 0} URLs sameAs)
                     </span>
                   </div>
                   {onClearReconciliation && (
@@ -275,7 +281,7 @@ export const WikidataReconcileModal: React.FC<WikidataReconcileModalProps> = ({
                       className="px-2.5 py-1 text-[11px] font-bold text-red-600 hover:text-red-700 bg-white hover:bg-red-50 border border-red-200 rounded-lg flex items-center gap-1 transition-colors cursor-pointer shrink-0"
                     >
                       <Trash2 className="w-3 h-3" />
-                      <span>Desvincular / Limpar</span>
+                      <span>{t.wikidataModal.unlink}</span>
                     </button>
                   )}
                 </div>
@@ -290,7 +296,7 @@ export const WikidataReconcileModal: React.FC<WikidataReconcileModalProps> = ({
                     value={searchTerm}
                     onChange={(e) => setSearchTerm(e.target.value)}
                     onKeyDown={(e) => e.key === "Enter" && handleSearch()}
-                    placeholder="Digite o nome da entidade para consultar Wikidata..."
+                    placeholder={t.wikidataModal.searchPlaceholder}
                     className="w-full pl-9 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-semibold text-[#302c33] focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#fdd910]"
                   />
                 </div>
@@ -304,7 +310,7 @@ export const WikidataReconcileModal: React.FC<WikidataReconcileModalProps> = ({
                   ) : (
                     <Globe className="w-4 h-4 text-[#fdd910]" />
                   )}
-                  <span>Buscar no Wikidata</span>
+                  <span>{t.wikidataModal.btnSearch}</span>
                 </button>
               </div>
 
@@ -313,7 +319,7 @@ export const WikidataReconcileModal: React.FC<WikidataReconcileModalProps> = ({
                 <div className="p-8 text-center space-y-2">
                   <RefreshCw className="w-8 h-8 animate-spin text-[#590050] mx-auto" />
                   <p className="text-xs font-semibold text-slate-600">
-                    Consultando API oficial do Wikidata e bases enciclopédicas...
+                    {t.wikidataModal.searching}
                   </p>
                 </div>
               )}
@@ -322,11 +328,11 @@ export const WikidataReconcileModal: React.FC<WikidataReconcileModalProps> = ({
                 <div className="space-y-4">
                   <div className="flex items-center justify-between">
                     <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">
-                      Melhor Correspondência Ontológica
+                      {t.wikidataModal.topMatch}
                     </span>
                     <span className="inline-flex items-center gap-1 text-[11px] font-bold text-[#2d7a22] bg-[#7bc970]/15 px-2.5 py-0.5 rounded-full border border-[#7bc970]/30">
                       <ShieldCheck className="w-3.5 h-3.5" />
-                      Confiança {topMatch.confidence}%
+                      {t.wikidataModal.confidence} {topMatch.confidence}%
                     </span>
                   </div>
 
@@ -358,12 +364,12 @@ export const WikidataReconcileModal: React.FC<WikidataReconcileModalProps> = ({
                         {appliedId === topMatch.wikidataId ? (
                           <>
                             <Check className="w-4 h-4" />
-                            <span>Vinculado!</span>
+                            <span>{t.wikidataModal.applySuccess}</span>
                           </>
                         ) : (
                           <>
                             <Link2 className="w-4 h-4" />
-                            <span>Vincular ao Schema sameAs</span>
+                            <span>{t.wikidataModal.applySchema}</span>
                           </>
                         )}
                       </button>
@@ -373,7 +379,7 @@ export const WikidataReconcileModal: React.FC<WikidataReconcileModalProps> = ({
                     <div className="pt-2 border-t border-slate-200 space-y-2">
                       <div className="flex items-center justify-between">
                         <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">
-                          URLs canônicas que serão adicionadas ao seu campo sameAs:
+                          {t.wikidataModal.canonicalUrlsHeading}
                         </span>
                         <button
                           type="button"
@@ -381,7 +387,7 @@ export const WikidataReconcileModal: React.FC<WikidataReconcileModalProps> = ({
                           className="text-[11px] font-semibold text-[#2576c0] hover:underline flex items-center gap-1 cursor-pointer"
                         >
                           <Plus className="w-3 h-3" />
-                          <span>Adicionar URL manual</span>
+                          <span>{t.wikidataModal.addManualUrl}</span>
                         </button>
                       </div>
 
@@ -393,7 +399,7 @@ export const WikidataReconcileModal: React.FC<WikidataReconcileModalProps> = ({
                             value={newUrlInput}
                             onChange={(e) => setNewUrlInput(e.target.value)}
                             onKeyDown={(e) => e.key === "Enter" && handleAddUrl()}
-                            placeholder="https://en.wikipedia.org/wiki/Nome_Correto"
+                            placeholder="https://en.wikipedia.org/wiki/..."
                             className="flex-1 text-xs px-2.5 py-1.5 border border-slate-200 rounded-md focus:outline-none focus:border-[#2576c0]"
                             autoFocus
                           />
@@ -402,7 +408,7 @@ export const WikidataReconcileModal: React.FC<WikidataReconcileModalProps> = ({
                             onClick={() => handleAddUrl()}
                             className="px-3 py-1.5 bg-[#2576c0] text-white text-xs font-bold rounded-md hover:bg-blue-700 cursor-pointer"
                           >
-                            Adicionar
+                            {t.wikidataModal.addBtn}
                           </button>
                           <button
                             type="button"
@@ -464,7 +470,7 @@ export const WikidataReconcileModal: React.FC<WikidataReconcileModalProps> = ({
                   {/* Other Matches */}
                   {matches.length > 1 && (
                     <div className="space-y-2 pt-2">
-                      <span className="text-xs font-bold text-slate-500">Outros resultados no Wikidata:</span>
+                      <span className="text-xs font-bold text-slate-500">{t.wikidataModal.otherMatchesHeading}</span>
                       <div className="space-y-2">
                         {matches.slice(1).map((m) => (
                           <div
@@ -484,7 +490,7 @@ export const WikidataReconcileModal: React.FC<WikidataReconcileModalProps> = ({
                               onClick={() => handleSelectOtherMatch(m)}
                               className="px-3 py-1 bg-slate-100 hover:bg-slate-200 text-[#302c33] text-xs font-semibold rounded-md transition-colors cursor-pointer"
                             >
-                              Selecionar
+                              {t.wikidataModal.selectMatch}
                             </button>
                           </div>
                         ))}
@@ -497,10 +503,7 @@ export const WikidataReconcileModal: React.FC<WikidataReconcileModalProps> = ({
               {!isLoading && !topMatch && (
                 <div className="p-8 text-center text-slate-400 bg-slate-50 rounded-xl border border-slate-200">
                   <Info className="w-8 h-8 text-slate-400 mx-auto mb-2" />
-                  <p className="text-xs font-semibold">Nenhuma correspondência encontrada no Wikidata.</p>
-                  <p className="text-[11px] text-slate-400 mt-1">
-                    Tente refinar a busca digitando o termo em português ou inglês.
-                  </p>
+                  <p className="text-xs font-semibold">{t.wikidataModal.noMatches}</p>
                 </div>
               )}
             </>
@@ -511,7 +514,7 @@ export const WikidataReconcileModal: React.FC<WikidataReconcileModalProps> = ({
                 <div className="flex items-center justify-between">
                   <div>
                     <h3 className="text-xs font-bold text-[#302c33]">
-                      Reconciliação Automática do Glossário Completo
+                      {t.wikidataModal.bulkHeading}
                     </h3>
                     <p className="text-xs text-slate-500">
                       O sistema consultará o Wikidata para todas as {allEntities.length} entidades cadastradas e vinculará os Q-IDs automaticamente.
@@ -527,7 +530,7 @@ export const WikidataReconcileModal: React.FC<WikidataReconcileModalProps> = ({
                     ) : (
                       <Sparkles className="w-4 h-4" />
                     )}
-                    <span>Iniciar Varredura em Lote</span>
+                    <span>{t.wikidataModal.bulkStartBtn}</span>
                   </button>
                 </div>
               </div>
@@ -544,7 +547,7 @@ export const WikidataReconcileModal: React.FC<WikidataReconcileModalProps> = ({
                       className="px-3.5 py-1.5 bg-[#7bc970] text-black text-xs font-bold rounded-lg shadow-sm hover:bg-[#6ab860] transition-colors cursor-pointer flex items-center gap-1"
                     >
                       <Check className="w-3.5 h-3.5" />
-                      <span>Aplicar Todos ao Glossário</span>
+                      <span>{t.wikidataModal.bulkApplyAll}</span>
                     </button>
                   </div>
 
@@ -604,13 +607,13 @@ export const WikidataReconcileModal: React.FC<WikidataReconcileModalProps> = ({
         <div className="px-6 py-3 bg-slate-50 border-t border-slate-200 flex items-center justify-between text-xs text-slate-500">
           <span className="flex items-center gap-1.5">
             <ShieldCheck className="w-3.5 h-3.5 text-[#7bc970]" />
-            <span>Compatível com Google Knowledge Graph & Schema.org DefinedTerm</span>
+            <span>{t.wikidataModal.knowledgeGraphBadge}</span>
           </span>
           <button
             onClick={onClose}
             className="px-4 py-1.5 bg-slate-200 hover:bg-slate-300 text-slate-700 text-xs font-bold rounded-lg transition-colors cursor-pointer"
           >
-            Fechar
+            {t.wikidataModal.btnClose}
           </button>
         </div>
 

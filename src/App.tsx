@@ -9,14 +9,19 @@ import { doc, onSnapshot, collection, query } from "firebase/firestore";
 import { 
   auth, 
   db, 
+  centralDb,
   syncUserProfile, 
+  subscribeCentralWallet,
+  deductCredits,
   logoutUser, 
   incrementUserToolUsage,
   saveUserEntity,
   batchSaveUserDefinitions,
   deleteUserEntity,
-  subscribeUserDefinitions
+  subscribeUserDefinitions,
+  updateUserUiLang
 } from "./lib/firebase";
+import { SupportedLang, getInitialUiLang, saveStoredUiLang, getTranslations } from "./lib/i18n";
 import { Navbar } from "./components/Navbar";
 import { DefinitionsTable } from "./components/DefinitionsTable";
 import { GraphStudioHero } from "./components/GraphStudioHero";
@@ -85,6 +90,10 @@ const SETTINGS_KEY = "seo_semantic_settings_v1";
 const AUTH_KEY = "semantico_auth_session";
 
 export default function App() {
+  // Multilingual UI State (i18n)
+  const [uiLang, setUiLang] = useState<SupportedLang>(getInitialUiLang);
+  const t = getTranslations(uiLang);
+
   // Firebase Auth & User Profile State
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
@@ -163,6 +172,26 @@ export default function App() {
     setTimeout(() => setToastMessage(null), 3500);
   };
 
+  const handleLanguageChange = (lang: SupportedLang) => {
+    setUiLang(lang);
+    saveStoredUiLang(lang);
+    setSettings((prev) => ({
+      ...prev,
+      language: lang === "en" ? "en-US" : lang === "es" ? "es-ES" : "pt-BR",
+    }));
+    if (userProfile?.uid) {
+      updateUserUiLang(userProfile.uid, lang).catch(console.error);
+    }
+    showToast(
+      lang === "en"
+        ? "Interface language set to English"
+        : lang === "es"
+        ? "Idioma de la interfaz establecido en Español"
+        : "Idioma da interface definido para Português",
+      "info"
+    );
+  };
+
   // Real-time Firebase Authentication & User Profile Listener
   useEffect(() => {
     let unsubscribeDoc: (() => void) | null = null;
@@ -187,33 +216,35 @@ export default function App() {
         try {
           const profile = await syncUserProfile(firebaseUser);
           setUserProfile(profile);
+          if (profile.uiLang && (profile.uiLang === "pt" || profile.uiLang === "en" || profile.uiLang === "es")) {
+            setUiLang(profile.uiLang);
+            saveStoredUiLang(profile.uiLang);
+          }
 
-          // Escuta em tempo real (onSnapshot) no perfil do usuário no Firestore
-          const userDocRef = doc(db, "users", firebaseUser.uid);
-          unsubscribeDoc = onSnapshot(userDocRef, (snap) => {
-            if (snap.exists()) {
-              const updated = snap.data() as UserProfile;
-              setUserProfile((prev) => {
-                // Se estava pendente e o admin aprovou, notifica e fecha o paywall instantaneamente
-                if (prev?.status === "pending" && updated.status === "active") {
-                  showToast("🎉 Seu acesso foi liberado pelo Administrador! Ferramentas desbloqueadas.");
-                  setIsPaywallOpen(false);
-                }
-                return updated;
-              });
-
-              // Se for admin, rastreia contagem de solicitações pendentes para exibir badge
-              if (updated.role === "admin" && !unsubscribeUsersList) {
-                const usersCol = collection(db, "users");
-                unsubscribeUsersList = onSnapshot(usersCol, (usersSnap) => {
-                  let count = 0;
-                  usersSnap.forEach((uDoc) => {
-                    const u = uDoc.data() as UserProfile;
-                    if (u.status === "pending") count++;
-                  });
-                  setPendingCount(count);
-                });
+          // Escuta em tempo real (onSnapshot) na carteira central do usuário (semantico-suite-core)
+          unsubscribeDoc = subscribeCentralWallet(firebaseUser.uid, (updated) => {
+            setUserProfile((prev) => {
+              if (prev && prev.creditsBalance !== undefined && updated.creditsBalance !== undefined && updated.creditsBalance > prev.creditsBalance) {
+                showToast(`🎉 +${updated.creditsBalance - prev.creditsBalance} créditos adicionados à sua carteira!`);
+                setIsPaywallOpen(false);
+              } else if (prev?.status === "pending" && updated.status === "active") {
+                showToast("🎉 Seu acesso foi liberado pelo Administrador! Ferramentas desbloqueadas.");
+                setIsPaywallOpen(false);
               }
+              return updated;
+            });
+
+            // Se for admin, rastreia contagem de solicitações pendentes para exibir badge
+            if (updated.role === "admin" && !unsubscribeUsersList) {
+              const usersCol = collection(centralDb, "users");
+              unsubscribeUsersList = onSnapshot(usersCol, (usersSnap) => {
+                let count = 0;
+                usersSnap.forEach((uDoc) => {
+                  const u = uDoc.data() as UserProfile;
+                  if (u.status === "pending") count++;
+                });
+                setPendingCount(count);
+              });
             }
           });
 
@@ -262,19 +293,42 @@ export default function App() {
     };
   }, []);
 
-  // Graceful Access Control (Paywall check)
-  const checkSubscription = (actionName: string): boolean => {
-    // Administradores e clientes com status 'active' possuem acesso pleno
-    if (userProfile && (userProfile.role === "admin" || userProfile.status === "active")) {
-      // Incrementa contador de uso de forma não-bloqueante
+  // Graceful Access Control & Unified Credit Wallet Check
+  const checkSubscription = (actionName: string, creditCost: number = 1): boolean => {
+    if (!userProfile) {
+      setPaywallAction(actionName);
+      setIsPaywallOpen(true);
+      return false;
+    }
+
+    // Administradores possuem acesso pleno e ilimitado
+    if (userProfile.role === "admin") {
       incrementUserToolUsage(userProfile.uid).catch(console.error);
       return true;
     }
 
-    // Se não estiver logado ou estiver pendente/bloqueado/expirado, abre o paywall com a ação informada
-    setPaywallAction(actionName);
-    setIsPaywallOpen(true);
-    return false;
+    // Clientes precisam estar com status 'active'
+    if (userProfile.status !== "active") {
+      setPaywallAction(actionName);
+      setIsPaywallOpen(true);
+      return false;
+    }
+
+    // Validação de saldo da carteira de créditos unificada
+    const currentBalance = userProfile.creditsBalance ?? 0;
+    if (currentBalance < creditCost) {
+      setPaywallAction(`${actionName} (requer ${creditCost} crédito${creditCost > 1 ? "s" : ""}, saldo atual: ${currentBalance})`);
+      setIsPaywallOpen(true);
+      return false;
+    }
+
+    // Debita os créditos atomicamente na base central semantico-suite-core
+    deductCredits(userProfile.uid, creditCost, actionName, userProfile.email).catch((err) => {
+      console.warn("Falha ao debitar créditos na carteira central:", err);
+    });
+
+    incrementUserToolUsage(userProfile.uid).catch(console.error);
+    return true;
   };
 
   // Sync to local storage
@@ -630,6 +684,14 @@ export default function App() {
   return (
     <div className="min-h-screen bg-graph-grid text-slate-800 font-sans flex flex-col selection:bg-[#f5be38] selection:text-slate-950">
       
+      {/* Skip to Main Content Link (WCAG 2.2 AA) */}
+      <a
+        href="#main-content"
+        className="skip-link sr-only focus:not-sr-only focus:absolute focus:top-2 focus:left-2 focus:z-50 focus:px-4 focus:py-2 focus:bg-[#f5be38] focus:text-slate-950 font-bold focus:rounded-xl focus:shadow-lg focus:outline-none"
+      >
+        {t.skipLink}
+      </a>
+
       {/* Top Two-Tier Navbar */}
       <Navbar
         totalEntities={definitions.length}
@@ -651,11 +713,14 @@ export default function App() {
         userProfile={userProfile}
         onLogout={handleLogout}
         onOpenAdminPanel={() => setIsAdminPanelOpen(true)}
-        onOpenAuthModal={() => {
-          setAuthModalMode("login");
+        onOpenAuthModal={(mode = "login") => {
+          setAuthModalMode(mode);
           setIsAuthModalOpen(true);
         }}
+        onOpenPaywall={() => setIsPaywallOpen(true)}
         pendingCount={pendingCount}
+        uiLang={uiLang}
+        onLanguageChange={handleLanguageChange}
         onScrollToSection={(sectionId) => {
           if (activeView !== "overview") {
             setActiveView("overview");
@@ -671,7 +736,7 @@ export default function App() {
       />
 
       {/* Main Container Content */}
-      <main className="flex-1 w-full mx-auto">
+      <main id="main-content" role="main" tabIndex={-1} className="flex-1 w-full mx-auto outline-none">
         
         {/* Dynamic Views */}
         {activeView === "overview" && (
@@ -679,6 +744,7 @@ export default function App() {
             onStartTesting={() => setActiveView("table")}
             onOpenBatchModal={handleOpenBatch}
             onOpenSingleModal={handleOpenSingleNew}
+            uiLang={uiLang}
           />
         )}
 
@@ -695,6 +761,7 @@ export default function App() {
               onOpenTopicalAudit={handleOpenTopicalAudit}
               onOpenWikidataModal={handleOpenWikidata}
               onOpenPromptModal={handleOpenPrompt}
+              uiLang={uiLang}
             />
           </div>
         )}
@@ -766,6 +833,7 @@ export default function App() {
 
       {/* Editorial System Footer */}
       <Footer
+        uiLang={uiLang}
         onOpenSingleModal={handleOpenSingleNew}
         onScrollToSection={(sectionId) => {
           if (activeView !== "overview") {
@@ -805,6 +873,7 @@ export default function App() {
             editingEntity={editingEntity}
             settings={settings}
             presets={presets}
+            uiLang={uiLang}
           />
         )}
 
@@ -815,6 +884,7 @@ export default function App() {
             onAddBatch={handleAddBatch}
             settings={settings}
             presets={presets}
+            uiLang={uiLang}
           />
         )}
 
@@ -887,6 +957,7 @@ export default function App() {
               if (!checkSubscription("Reconciliação em Lote")) return;
               handleBulkApplyWikidata(matches);
             }}
+            uiLang={uiLang}
           />
         )}
 
@@ -910,6 +981,7 @@ export default function App() {
               setIsTopicalAuditModalOpen(false);
               setIsBatchModalOpen(true);
             }}
+            uiLang={uiLang}
           />
         )}
 

@@ -190,9 +190,11 @@ export interface GenerationSettings {
   customPromptTemplate: string;
 }
 
+export type SupportedLang = "pt" | "en" | "es";
+
 export type UserRole = "admin" | "client";
 export type UserStatus = "active" | "pending" | "blocked" | "expired";
-export type UserPlan = "trial" | "monthly" | "annual" | "lifetime";
+export type UserPlan = "trial" | "specialist" | "agency" | "enterprise" | "monthly" | "annual" | "lifetime";
 
 export interface UserProfile {
   uid: string;
@@ -202,6 +204,11 @@ export interface UserProfile {
   role: UserRole;
   status: UserStatus;
   plan: UserPlan;
+  creditsBalance?: number;
+  creditsUsed?: number;
+  uiLang?: SupportedLang;
+  planExpiresAt?: string;
+  lastAppUsed?: string;
   createdAt: string;
   lastLoginAt?: string;
   notes?: string;

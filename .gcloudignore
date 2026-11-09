@@ -1,0 +1,16 @@
+.gcloudignore
+.git
+.gitignore
+node_modules/
+dist/
+.env
+.env.*
+*.env
+env.yaml
+.vscode/
+coverage/
+scratch/
+*.log
+python_core/.venv/
+python_core/__pycache__/
+saas_data/

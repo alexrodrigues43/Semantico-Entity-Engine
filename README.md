@@ -177,6 +177,20 @@ A plataforma possui um sistema de governança de dados estruturado em **Firestor
 
 ---
 
+## 🌍 Internacionalização Profunda (i18n) & Padrão de Duplo Controle
+
+A plataforma oferece suporte completo e nativo a três idiomas (**Português `pt`, Inglês `en` e Espanhol `es`**):
+
+1. **Duplo Controle de Idioma:**
+   - **`uiLang` (Interface):** Selecionado via cabeçalho acessível (WCAG 2.2 AA). Controla todos os menus, botões, modais (Auditoria Tópica, Wikidata Reconcile, Geração em Lote e Entidade Manual), landing pages e rodapé.
+   - **`contentLang` (Projeto/Entidades):** Define o idioma de consulta nas APIs da Wikipedia/Wikidata e a geração de definições e taxonomias pelo Gemini.
+2. **Matriz de Navegação Institucional Dinâmica (`NAV_URLS`):**
+   - Links para Serviços, Suíte, Blog, Podcasts e Contato apontam automaticamente para as páginas correspondentes no domínio principal `semantico.com.br` (`/servicos.html`, `/en/services.html`, `/es/servicios.html`).
+3. **Vocabulário Ontológico Estrito:**
+   - Erradicação absoluta de "palavra-chave" / "keyword". Emprego exclusivo de *Entidades*, *Conceitos* e *Termos*.
+
+---
+
 ## 📄 Licença & Créditos
 
 Desenvolvido pela equipe da **Semântico SEO**.  

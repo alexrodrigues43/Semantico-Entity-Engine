@@ -20,9 +20,11 @@ import {
   HelpCircle,
   BookOpen,
   Cpu,
-  Zap
+  Zap,
+  Globe
 } from "lucide-react";
 import { SeoEntityDefinition, GenerationSettings, PromptPreset, GenerationModel } from "../types";
+import { SupportedLang, getTranslations } from "../lib/i18n";
 
 interface BatchGeneratorModalProps {
   isOpen: boolean;
@@ -30,6 +32,7 @@ interface BatchGeneratorModalProps {
   onAddBatch: (definitions: SeoEntityDefinition[]) => void;
   settings: GenerationSettings;
   presets: PromptPreset[];
+  uiLang?: SupportedLang;
 }
 
 interface ExtractedEntityItem {
@@ -50,7 +53,15 @@ export const BatchGeneratorModal: React.FC<BatchGeneratorModalProps> = ({
   onAddBatch,
   settings,
   presets,
+  uiLang = "pt",
 }) => {
+  const t = getTranslations(uiLang);
+  const [contentLang, setContentLang] = useState<SupportedLang>(() => {
+    const s = settings.language?.toLowerCase() || "";
+    if (s.startsWith("en")) return "en";
+    if (s.startsWith("es")) return "es";
+    return uiLang || "pt";
+  });
   const [tab, setTab] = useState<"article" | "list">("article");
   const [activeModel, setActiveModel] = useState<string>(settings.model || "gemini-3.7-flash");
   
@@ -179,6 +190,7 @@ A Topical Authority (Autoridade Tópica) é construída quando um site cobre exa
           text: articleText,
           maxEntities: maxEntitiesToExtract,
           model: activeModel,
+          language: contentLang,
         }),
       });
 
@@ -303,7 +315,7 @@ A Topical Authority (Autoridade Tópica) é construída quando um site cobre exa
               model: activeModel,
               tone: settings.tone,
               length: settings.length,
-              language: settings.language,
+              language: contentLang,
               enableGrounding: settings.enableGrounding,
               customPromptTemplate: settings.customPromptTemplate,
             }),
@@ -348,7 +360,12 @@ A Topical Authority (Autoridade Tópica) é construída quando um site cobre exa
             const recRes = await fetch("/api/seo-definitions/reconcile-wikidata", {
               method: "POST",
               headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ entity: entityName, category: categoryName, model: activeModel }),
+              body: JSON.stringify({
+                entity: entityName,
+                category: categoryName,
+                model: activeModel,
+                language: contentLang,
+              }),
             });
             if (recRes.ok) {
               const recJson = await recRes.json();
@@ -438,7 +455,7 @@ A Topical Authority (Autoridade Tópica) é construída quando um site cobre exa
             <div>
               <div className="flex items-center gap-2">
                 <h2 className="text-base font-bold text-slate-900">
-                  Gerador de Definições em Lote (Bulk SEO)
+                  {t.batchModal.title}
                 </h2>
                 <div className="flex items-center gap-1.5 bg-indigo-50 border border-indigo-200 px-2 py-0.5 rounded text-[11px] font-bold text-indigo-700">
                   <Cpu className="w-3 h-3 text-indigo-600" />
@@ -455,7 +472,7 @@ A Topical Authority (Autoridade Tópica) é construída quando um site cobre exa
                 </div>
               </div>
               <p className="text-xs text-slate-500">
-                Minere entidades de textos completos ou cole listas para geração automatizada em massa
+                {t.batchModal.subtitle}
               </p>
             </div>
           </div>
@@ -481,7 +498,7 @@ A Topical Authority (Autoridade Tópica) é construída quando um site cobre exa
               }`}
             >
               <Sparkles className="w-4 h-4 text-indigo-600" />
-              <span>Extrair de Artigo / Post Completo</span>
+              <span>{t.batchModal.tabArticle}</span>
               {extractedEntities.length > 0 && (
                 <span className="px-1.5 py-0.2 bg-emerald-600 text-white rounded-full text-[10px]">
                   {extractedEntities.length}
@@ -499,7 +516,7 @@ A Topical Authority (Autoridade Tópica) é construída quando um site cobre exa
               }`}
             >
               <FileSpreadsheet className="w-4 h-4" />
-              <span>Lista de Entidades / Planilha</span>
+              <span>{t.batchModal.tabList}</span>
               {rawInput.split("\n").filter((l) => l.trim()).length > 0 && (
                 <span className="px-1.5 py-0.2 bg-indigo-600 text-white rounded-full text-[10px]">
                   {rawInput.split("\n").filter((l) => l.trim()).length}
@@ -522,8 +539,43 @@ A Topical Authority (Autoridade Tópica) é construída quando um site cobre exa
               className="text-xs text-slate-600 hover:text-indigo-600 font-semibold flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-slate-200 hover:border-indigo-200 hover:bg-indigo-50/50 transition-colors cursor-pointer"
             >
               <UploadCloud className="w-3.5 h-3.5" />
-              <span>Carregar Arquivo (.txt, .md, .csv)</span>
+              <span>{t.batchModal.uploadFile}</span>
             </button>
+          </div>
+        </div>
+
+        {/* Project / Content Language Selector (Multilingual Target) */}
+        <div className="px-6 py-2.5 bg-slate-50 border-b border-slate-200/80">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1.5">
+            <label className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
+              <Globe className="w-3.5 h-3.5 text-emerald-600" aria-hidden="true" />
+              <span>{t.projectLanguage.label}</span>
+            </label>
+            <span className="text-[11px] text-slate-500">
+              {t.projectLanguage.hint}
+            </span>
+          </div>
+          <div className="grid grid-cols-3 gap-2 pt-1.5">
+            {[
+              { id: "pt" as const, label: t.projectLanguage.pt, flag: "🇧🇷" },
+              { id: "en" as const, label: t.projectLanguage.en, flag: "🇺🇸" },
+              { id: "es" as const, label: t.projectLanguage.es, flag: "🇪🇸" },
+            ].map((item) => (
+              <button
+                key={item.id}
+                type="button"
+                onClick={() => setContentLang(item.id)}
+                className={`min-h-[44px] px-3 py-2 rounded-xl text-xs font-bold flex items-center justify-center gap-2 transition-all cursor-pointer border ${
+                  contentLang === item.id
+                    ? "bg-emerald-50 border-emerald-500 text-emerald-800 shadow-2xs ring-1 ring-emerald-500/30"
+                    : "bg-white border-slate-200 text-slate-600 hover:text-slate-900 hover:bg-slate-100"
+                }`}
+                aria-pressed={contentLang === item.id}
+              >
+                <span aria-hidden="true" className="text-sm">{item.flag}</span>
+                <span>{item.label}</span>
+              </button>
+            ))}
           </div>
         </div>
 
@@ -542,10 +594,10 @@ A Topical Authority (Autoridade Tópica) é construída quando um site cobre exa
                     </span>
                     <div>
                       <span className="text-xs font-bold text-slate-800 block">
-                        Suíte de Testes de Estresse Semântico & NER (Gold Standard)
+                        {t.batchModal.stressTestTitle}
                       </span>
                       <span className="text-[10px] text-slate-500 font-medium">
-                        Selecione um cenário para testar a desambiguação contextual estilo PoolParty e penalização de vagueza:
+                        {t.batchModal.stressTestSubtitle}
                       </span>
                     </div>
                   </div>
@@ -701,12 +753,12 @@ A Topical Authority (Autoridade Tópica) é construída quando um site cobre exa
                 {isExtracting ? (
                   <>
                     <RefreshCw className="w-4 h-4 animate-spin" />
-                    <span>Minerando ontologia e relações com IA ({activeModel})...</span>
+                    <span>{t.batchModal.btnExtracting}</span>
                   </>
                 ) : (
                   <>
                     <Sparkles className="w-4 h-4" />
-                    <span>{isJointExtraction ? "Executar Extração Conjunta (Entidades + Tripletos)" : "Extrair Entidades e Conceitos do Artigo"}</span>
+                    <span>{t.batchModal.btnExtractEntities}</span>
                   </>
                 )}
               </button>
@@ -970,7 +1022,7 @@ Entity Recognition, Processamento de Linguagem Natural`}
             disabled={isProcessing}
             className="px-4 py-2 text-xs font-semibold text-slate-600 hover:text-slate-800 rounded-lg hover:bg-slate-200/60 transition-colors disabled:opacity-40 cursor-pointer"
           >
-            Fechar
+            {t.batchModal.btnCancel}
           </button>
 
           <div className="flex items-center gap-2">
@@ -981,7 +1033,7 @@ Entity Recognition, Processamento de Linguagem Natural`}
                 className="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold rounded-lg shadow-sm flex items-center gap-1.5 transition-colors cursor-pointer"
               >
                 <Pause className="w-3.5 h-3.5" />
-                <span>Pausar Processamento</span>
+                <span>{t.batchModal.btnStop}</span>
               </button>
             ) : (
               <button
@@ -993,7 +1045,7 @@ Entity Recognition, Processamento de Linguagem Natural`}
               >
                 <Play className="w-3.5 h-3.5 fill-current" />
                 <span>
-                  Iniciar Geração em Lote ({rawInput.split("\n").filter((l) => l.trim()).length} itens)
+                  {t.batchModal.btnStartBatch} ({rawInput.split("\n").filter((l) => l.trim()).length} itens)
                 </span>
               </button>
             )}

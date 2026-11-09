@@ -26,6 +26,7 @@ import {
   SemanticTriplet,
   GenerationModel
 } from "../types";
+import { SupportedLang, getTranslations } from "../lib/i18n";
 
 interface TopicalAuditModalProps {
   isOpen: boolean;
@@ -35,6 +36,7 @@ interface TopicalAuditModalProps {
   onAddEntity: (entity: SeoEntityDefinition) => void;
   onAddTriplet: (sourceId: string, triplet: SemanticTriplet) => void;
   onOpenBatchWithTerms?: (terms: string[]) => void;
+  uiLang?: SupportedLang;
 }
 
 export const TopicalAuditModal: React.FC<TopicalAuditModalProps> = ({
@@ -45,7 +47,10 @@ export const TopicalAuditModal: React.FC<TopicalAuditModalProps> = ({
   onAddEntity,
   onAddTriplet,
   onOpenBatchWithTerms,
+  uiLang = "pt",
 }) => {
+  const t = getTranslations(uiLang);
+  const [contentLang, setContentLang] = useState<SupportedLang>(uiLang);
   const [topicScope, setTopicScope] = useState("");
   const [articleContent, setArticleContent] = useState("");
   const [isLoading, setIsLoading] = useState(false);
@@ -79,6 +84,7 @@ export const TopicalAuditModal: React.FC<TopicalAuditModalProps> = ({
             semanticTriplets: d.semanticTriplets || [],
           })),
           model: selectedModel,
+          language: contentLang,
         }),
       });
 
@@ -110,7 +116,7 @@ export const TopicalAuditModal: React.FC<TopicalAuditModalProps> = ({
           model: selectedModel,
           tone: "enciclopédico e autoritativo",
           length: "standard",
-          language: "pt-BR",
+          language: contentLang,
           enableGrounding: true,
           salienceScore: gap.importance === "crítica" ? 95 : gap.importance === "alta" ? 82 : 68,
           salienceLevel: gap.importance === "crítica" ? "central" : "supporting",
@@ -148,10 +154,22 @@ export const TopicalAuditModal: React.FC<TopicalAuditModalProps> = ({
 
       onAddEntity(newEntity);
       setAddedEntityNames((prev) => new Set(prev).add(gap.entity.toLowerCase()));
-      showLocalToast(`Entidade "${gap.entity}" adicionada ao glossário com sucesso!`);
+      showLocalToast(
+        uiLang === "en"
+          ? `Entity "${gap.entity}" added to glossary successfully!`
+          : uiLang === "es"
+          ? `¡Entidad "${gap.entity}" añadida al glosario con éxito!`
+          : `Entidade "${gap.entity}" adicionada ao glossário com sucesso!`
+      );
     } catch (err: any) {
       console.error(err);
-      showLocalToast(`Erro ao gerar "${gap.entity}". Tente novamente.`);
+      showLocalToast(
+        uiLang === "en"
+          ? `Error generating "${gap.entity}". Please try again.`
+          : uiLang === "es"
+          ? `Error al generar "${gap.entity}". Inténtalo de nuevo.`
+          : `Erro ao gerar "${gap.entity}". Tente novamente.`
+      );
     } finally {
       setGeneratingEntityId(null);
     }
@@ -172,9 +190,21 @@ export const TopicalAuditModal: React.FC<TopicalAuditModalProps> = ({
       };
       onAddTriplet(sourceEnt.id, triplet);
       setConnectedEdgeIds((prev) => new Set(prev).add(edge.id));
-      showLocalToast(`Aresta "${edge.sourceEntity} → ${edge.targetEntity}" conectada no Grafo!`);
+      showLocalToast(
+        uiLang === "en"
+          ? `Edge "${edge.sourceEntity} → ${edge.targetEntity}" connected in Graph!`
+          : uiLang === "es"
+          ? `¡Arista "${edge.sourceEntity} → ${edge.targetEntity}" conectada en el Grafo!`
+          : `Aresta "${edge.sourceEntity} → ${edge.targetEntity}" conectada no Grafo!`
+      );
     } else {
-      showLocalToast(`Entidade de origem "${edge.sourceEntity}" ainda não está no glossário.`);
+      showLocalToast(
+        uiLang === "en"
+          ? `Source entity "${edge.sourceEntity}" is not yet in the glossary.`
+          : uiLang === "es"
+          ? `La entidad de origen "${edge.sourceEntity}" aún no está en el glosario.`
+          : `Entidade de origem "${edge.sourceEntity}" ainda não está no glossário.`
+      );
     }
   };
 
@@ -191,14 +221,14 @@ export const TopicalAuditModal: React.FC<TopicalAuditModalProps> = ({
             <div>
               <div className="flex items-center gap-2">
                 <h2 className="text-lg font-bold text-slate-900 tracking-tight">
-                  Auditoria de Lacunas Tópicas & Arestas Faltantes
+                  {t.topicalAuditModal.title}
                 </h2>
                 <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-purple-100 text-purple-700 uppercase tracking-wide">
                   Topical Authority SOTA
                 </span>
               </div>
               <p className="text-xs text-slate-500">
-                Detecta nós ontológicos ausentes, arestas relacionais não conectadas e calcula a cobertura do seu Knowledge Graph.
+                {t.topicalAuditModal.subtitle}
               </p>
             </div>
           </div>
@@ -218,7 +248,7 @@ export const TopicalAuditModal: React.FC<TopicalAuditModalProps> = ({
             <div className="flex flex-col sm:flex-row gap-3 items-center">
               <div className="flex-1 w-full">
                 <label className="block text-xs font-semibold text-slate-700 mb-1">
-                  Nicho ou Tema Central para Análise de Autoridade:
+                  {t.topicalAuditModal.scopeLabel}
                 </label>
                 <div className="relative">
                   <Search className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
@@ -226,7 +256,7 @@ export const TopicalAuditModal: React.FC<TopicalAuditModalProps> = ({
                     type="text"
                     value={topicScope}
                     onChange={(e) => setTopicScope(e.target.value)}
-                    placeholder="Ex: SEO Semântico, Knowledge Graphs, Inteligência Artificial, Odontologia..."
+                    placeholder={t.topicalAuditModal.scopePlaceholder}
                     className="w-full pl-9 pr-4 py-2 text-sm bg-white border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500"
                   />
                 </div>
@@ -240,12 +270,12 @@ export const TopicalAuditModal: React.FC<TopicalAuditModalProps> = ({
                   {isLoading ? (
                     <>
                       <RefreshCw className="w-4 h-4 animate-spin" />
-                      <span>Auditando com IA...</span>
+                      <span>{t.topicalAuditModal.btnRunning}</span>
                     </>
                   ) : (
                     <>
                       <Sparkles className="w-4 h-4" />
-                      <span>Executar Auditoria Tópica</span>
+                      <span>{t.topicalAuditModal.btnRun}</span>
                     </>
                   )}
                 </button>
@@ -254,12 +284,12 @@ export const TopicalAuditModal: React.FC<TopicalAuditModalProps> = ({
 
             <details className="text-xs text-slate-600 pt-1 cursor-pointer">
               <summary className="font-medium text-purple-700 hover:underline">
-                + Opcional: Adicionar texto de artigo ou pilar para auditar lacunas de um conteúdo específico
+                {t.topicalAuditModal.optionalArticle}
               </summary>
               <textarea
                 value={articleContent}
                 onChange={(e) => setArticleContent(e.target.value)}
-                placeholder="Cole o artigo aqui se quiser que a IA audite quais conceitos e arestas essenciais estão faltando neste texto..."
+                placeholder={t.topicalAuditModal.articlePlaceholder}
                 rows={3}
                 className="w-full mt-2 p-2 text-xs bg-white border border-slate-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-purple-500"
               />
@@ -277,7 +307,7 @@ export const TopicalAuditModal: React.FC<TopicalAuditModalProps> = ({
                 <div className="bg-gradient-to-br from-purple-50 to-indigo-50 border border-purple-200 rounded-xl p-4 flex flex-col justify-between">
                   <div className="flex items-center justify-between">
                     <span className="text-xs font-semibold text-purple-900 uppercase tracking-wide">
-                      Autoridade Tópica
+                      {t.topicalAuditModal.authorityGauge}
                     </span>
                     <TrendingUp className="w-4 h-4 text-purple-600" />
                   </div>
@@ -301,7 +331,7 @@ export const TopicalAuditModal: React.FC<TopicalAuditModalProps> = ({
                 <div className="bg-gradient-to-br from-emerald-50 to-teal-50 border border-emerald-200 rounded-xl p-4 flex flex-col justify-between">
                   <div className="flex items-center justify-between">
                     <span className="text-xs font-semibold text-emerald-900 uppercase tracking-wide">
-                      Densidade do Grafo
+                      {t.topicalAuditModal.graphDensity}
                     </span>
                     <Network className="w-4 h-4 text-emerald-600" />
                   </div>
@@ -325,7 +355,7 @@ export const TopicalAuditModal: React.FC<TopicalAuditModalProps> = ({
                 <div className="bg-gradient-to-br from-rose-50 to-red-50 border border-rose-200 rounded-xl p-4 flex flex-col justify-between">
                   <div className="flex items-center justify-between">
                     <span className="text-xs font-semibold text-rose-900 uppercase tracking-wide">
-                      Nós Ausentes (Gaps)
+                      {t.topicalAuditModal.missingNodes}
                     </span>
                     <AlertTriangle className="w-4 h-4 text-rose-600" />
                   </div>
@@ -346,7 +376,7 @@ export const TopicalAuditModal: React.FC<TopicalAuditModalProps> = ({
                 <div className="bg-gradient-to-br from-amber-50 to-yellow-50 border border-amber-200 rounded-xl p-4 flex flex-col justify-between">
                   <div className="flex items-center justify-between">
                     <span className="text-xs font-semibold text-amber-900 uppercase tracking-wide">
-                      Pontes Faltantes
+                      {t.topicalAuditModal.missingEdges}
                     </span>
                     <Zap className="w-4 h-4 text-amber-600" />
                   </div>
@@ -406,7 +436,7 @@ export const TopicalAuditModal: React.FC<TopicalAuditModalProps> = ({
                     }`}
                   >
                     <BookOpen className="w-4 h-4" />
-                    <span>Nós Ausentes ({auditReport.missingEntities.length})</span>
+                    <span>{t.topicalAuditModal.tabGaps} ({auditReport.missingEntities.length})</span>
                   </button>
                   <button
                     onClick={() => setActiveTab("edges")}
@@ -417,7 +447,7 @@ export const TopicalAuditModal: React.FC<TopicalAuditModalProps> = ({
                     }`}
                   >
                     <Network className="w-4 h-4" />
-                    <span>Arestas Faltantes ({auditReport.missingEdges.length})</span>
+                    <span>{t.topicalAuditModal.tabEdges} ({auditReport.missingEdges.length})</span>
                   </button>
                   <button
                     onClick={() => setActiveTab("strategy")}
@@ -428,13 +458,13 @@ export const TopicalAuditModal: React.FC<TopicalAuditModalProps> = ({
                     }`}
                   >
                     <ShieldCheck className="w-4 h-4" />
-                    <span>Estratégia & Páginas Pilares</span>
+                    <span>{t.topicalAuditModal.tabStrategy}</span>
                   </button>
                 </div>
 
                 {auditReport.isLocalFallback && (
                   <span className="text-[11px] text-amber-600 font-medium px-2 py-0.5 rounded bg-amber-50 border border-amber-200">
-                    Modo Resiliente Local
+                    {uiLang === "en" ? "Local Resilient Mode" : uiLang === "es" ? "Modo Resiliente Local" : "Modo Resiliente Local"}
                   </span>
                 )}
               </div>
@@ -444,7 +474,11 @@ export const TopicalAuditModal: React.FC<TopicalAuditModalProps> = ({
                 <div className="space-y-3">
                   <div className="flex items-center justify-between text-xs text-slate-500">
                     <span>
-                      Entidades fundamentais que os buscadores esperam encontrar no seu nicho temático:
+                      {uiLang === "en"
+                        ? "Fundamental entities that search engines expect to find in your topical niche:"
+                        : uiLang === "es"
+                        ? "Entidades fundamentales que los buscadores esperan encontrar en su nicho temático:"
+                        : "Entidades fundamentais que os buscadores esperam encontrar no seu nicho temático:"}
                     </span>
                     {onOpenBatchWithTerms && auditReport.missingEntities.length > 0 && (
                       <button
@@ -458,7 +492,7 @@ export const TopicalAuditModal: React.FC<TopicalAuditModalProps> = ({
                         className="text-purple-600 hover:text-purple-800 font-semibold flex items-center gap-1"
                       >
                         <Layers className="w-3.5 h-3.5" />
-                        <span>Gerar todas em Lote</span>
+                        <span>{uiLang === "en" ? "Generate all in Batch" : uiLang === "es" ? "Generar todas por Lotes" : "Gerar todas em Lote"}</span>
                       </button>
                     )}
                   </div>
@@ -499,7 +533,7 @@ export const TopicalAuditModal: React.FC<TopicalAuditModalProps> = ({
                             </p>
 
                             <div className="text-[11px] text-slate-500 bg-slate-50 rounded-lg p-2 mb-3">
-                              <span className="font-semibold text-slate-700">Intenção: </span>
+                              <span className="font-semibold text-slate-700">{uiLang === "en" ? "Intent: " : uiLang === "es" ? "Intención: " : "Intenção: "}</span>
                               {gap.estimatedSearchIntent}
                             </div>
                           </div>
@@ -508,7 +542,7 @@ export const TopicalAuditModal: React.FC<TopicalAuditModalProps> = ({
                             {isAdded ? (
                               <span className="text-xs font-semibold text-emerald-600 flex items-center gap-1">
                                 <CheckCircle2 className="w-4 h-4" />
-                                <span>Cadastrada no Glossário</span>
+                                <span>{uiLang === "en" ? "Added to Glossary" : uiLang === "es" ? "Registrada en el Glosario" : "Cadastrada no Glossário"}</span>
                               </span>
                             ) : (
                               <button
@@ -519,12 +553,12 @@ export const TopicalAuditModal: React.FC<TopicalAuditModalProps> = ({
                                 {isGenerating ? (
                                   <>
                                     <RefreshCw className="w-3.5 h-3.5 animate-spin" />
-                                    <span>Gerando com IA...</span>
+                                    <span>{uiLang === "en" ? "Generating with AI..." : uiLang === "es" ? "Generando con IA..." : "Gerando com IA..."}</span>
                                   </>
                                 ) : (
                                   <>
                                     <Plus className="w-3.5 h-3.5" />
-                                    <span>Gerar e Adicionar ao Glossário</span>
+                                    <span>{uiLang === "en" ? "Generate & Add to Glossary" : uiLang === "es" ? "Generar y Añadir al Glosario" : "Gerar e Adicionar ao Glossário"}</span>
                                   </>
                                 )}
                               </button>
@@ -541,7 +575,11 @@ export const TopicalAuditModal: React.FC<TopicalAuditModalProps> = ({
               {activeTab === "edges" && (
                 <div className="space-y-3">
                   <p className="text-xs text-slate-500">
-                    Pontes ontológicas recomendadas para conectar nós isolados e enriquecer os dados estruturados:
+                    {uiLang === "en"
+                      ? "Ontological bridges recommended to connect isolated nodes and enrich structured data:"
+                      : uiLang === "es"
+                      ? "Puentes ontológicos recomendados para conectar nodos aislados y enriquecer los datos estructurados:"
+                      : "Pontes ontológicas recomendadas para conectar nós isolados e enriquecer os dados estruturados:"}
                   </p>
 
                   <div className="space-y-2.5">
@@ -565,7 +603,7 @@ export const TopicalAuditModal: React.FC<TopicalAuditModalProps> = ({
                                 {edge.targetEntity}
                               </span>
                               <span className="text-[10px] uppercase font-semibold text-slate-500 ml-2">
-                                Prioridade: {edge.priority}
+                                {uiLang === "en" ? "Priority: " : uiLang === "es" ? "Prioridad: " : "Prioridade: "}{edge.priority}
                               </span>
                             </div>
                             <p className="text-xs text-slate-600">
@@ -577,7 +615,7 @@ export const TopicalAuditModal: React.FC<TopicalAuditModalProps> = ({
                             {isConnected ? (
                               <span className="text-xs font-semibold text-emerald-600 flex items-center gap-1 whitespace-nowrap">
                                 <CheckCircle2 className="w-4 h-4" />
-                                <span>Conectada</span>
+                                <span>{uiLang === "en" ? "Connected" : uiLang === "es" ? "Conectada" : "Conectada"}</span>
                               </span>
                             ) : (
                               <button
@@ -585,7 +623,7 @@ export const TopicalAuditModal: React.FC<TopicalAuditModalProps> = ({
                                 className="w-full sm:w-auto py-1.5 px-3 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 text-emerald-700 rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 transition-colors whitespace-nowrap"
                               >
                                 <Network className="w-3.5 h-3.5" />
-                                <span>Conectar no Grafo</span>
+                                <span>{uiLang === "en" ? "Connect in Graph" : uiLang === "es" ? "Conectar en el Grafo" : "Conectar no Grafo"}</span>
                               </button>
                             )}
                           </div>
@@ -604,10 +642,18 @@ export const TopicalAuditModal: React.FC<TopicalAuditModalProps> = ({
                   <div className="bg-slate-50 border border-slate-200 rounded-xl p-4">
                     <h3 className="text-xs font-bold text-slate-800 uppercase tracking-wide mb-2 flex items-center gap-1.5">
                       <Layers className="w-4 h-4 text-purple-600" />
-                      Páginas Pilares Recomendadas (Cornerstone Content)
+                      {uiLang === "en"
+                        ? "Recommended Pillar Pages (Cornerstone Content)"
+                        : uiLang === "es"
+                        ? "Páginas Pilar Recomendadas (Cornerstone Content)"
+                        : "Páginas Pilares Recomendadas (Cornerstone Content)"}
                     </h3>
                     <p className="text-xs text-slate-600 mb-3">
-                      Estas entidades concentram a maior centralidade semântica e devem conter artigos aprofundados com interlinking radial:
+                      {uiLang === "en"
+                        ? "These entities concentrate the highest semantic centrality and should contain in-depth articles with radial interlinking:"
+                        : uiLang === "es"
+                        ? "Estas entidades concentran la mayor centralidad semántica y deben contener artículos profundos con enlazado radial:"
+                        : "Estas entidades concentram a maior centralidade semântica e devem conter artigos aprofundados com interlinking radial:"}
                     </p>
                     <div className="flex flex-wrap gap-2">
                       {auditReport.pillarEntities.map((pillar, idx) => (
@@ -626,7 +672,11 @@ export const TopicalAuditModal: React.FC<TopicalAuditModalProps> = ({
                   <div className="bg-white border border-slate-200 rounded-xl p-4">
                     <h3 className="text-xs font-bold text-slate-800 uppercase tracking-wide mb-3 flex items-center gap-1.5">
                       <ShieldCheck className="w-4 h-4 text-emerald-600" />
-                      Plano de Ação Estratégico para Autoridade Tópica
+                      {uiLang === "en"
+                        ? "Strategic Action Plan for Topical Authority"
+                        : uiLang === "es"
+                        ? "Plan de Acción Estratégico para Autoridad Tópica"
+                        : "Plano de Ação Estratégico para Autoridade Tópica"}
                     </h3>
                     <ul className="space-y-2.5">
                       {auditReport.strategicRecommendations.map((rec, idx) => (
@@ -650,10 +700,18 @@ export const TopicalAuditModal: React.FC<TopicalAuditModalProps> = ({
                 <Target className="w-8 h-8" />
               </div>
               <h3 className="font-semibold text-slate-700 mb-1">
-                Pronto para auditar a autoridade tópica do seu acervo
+                {uiLang === "en"
+                  ? "Ready to audit your collection's topical authority"
+                  : uiLang === "es"
+                  ? "Listo para auditar la autoridad tópica de su colección"
+                  : "Pronto para auditar a autoridade tópica do seu acervo"}
               </h3>
               <p className="text-xs text-slate-500 max-w-md">
-                Clique no botão "Executar Auditoria Tópica" acima para analisar as {definitions.length} entidades cadastradas, descobrir lacunas de conteúdo e identificar arestas faltantes no Knowledge Graph.
+                {uiLang === "en"
+                  ? `Click the "Run Topical Audit" button above to analyze ${definitions.length} registered entities, discover content gaps, and identify missing edges in the Knowledge Graph.`
+                  : uiLang === "es"
+                  ? `Haga clic en el botón "Ejecutar Auditoría Tópica" arriba para analizar las ${definitions.length} entidades registradas, descubrir brechas de contenido e identificar aristas faltantes en el Knowledge Graph.`
+                  : `Clique no botão "Executar Auditoria Tópica" acima para analisar as ${definitions.length} entidades cadastradas, descobrir lacunas de conteúdo e identificar arestas faltantes no Knowledge Graph.`}
               </p>
             </div>
           )}
@@ -664,13 +722,13 @@ export const TopicalAuditModal: React.FC<TopicalAuditModalProps> = ({
         <div className="px-6 py-4 border-t border-slate-100 bg-slate-50 flex items-center justify-between">
           <div className="text-xs text-slate-500 flex items-center gap-2">
             <Cpu className="w-4 h-4 text-purple-600" />
-            <span>Modelo: {selectedModel}</span>
+            <span>{uiLang === "en" ? "Model: " : uiLang === "es" ? "Modelo: " : "Modelo: "}{selectedModel}</span>
           </div>
           <button
             onClick={onClose}
             className="px-4 py-2 bg-slate-200 hover:bg-slate-300 text-slate-800 rounded-lg text-xs font-semibold transition-colors"
           >
-            Fechar
+            {t.topicalAuditModal.btnClose}
           </button>
         </div>
 
